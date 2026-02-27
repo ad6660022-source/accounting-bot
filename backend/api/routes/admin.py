@@ -51,8 +51,7 @@ async def set_role(
     if user_id == admin.id and body.role == "user":
         raise HTTPException(status_code=400, detail="Нельзя снять права с самого себя")
 
-    async with session.begin():
-        user = await crud.set_user_role(session, user_id, body.role)
+    user = await crud.set_user_role(session, user_id, body.role)
     return {"id": user.id, "role": user.role}
 
 

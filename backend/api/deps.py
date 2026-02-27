@@ -13,9 +13,10 @@ from backend.database.session import async_session_factory
 
 
 async def get_session() -> AsyncSession:
-    """Dependency: открывает сессию БД на время запроса."""
+    """Dependency: открывает сессию БД и оборачивает запрос в одну транзакцию."""
     async with async_session_factory() as session:
-        yield session
+        async with session.begin():
+            yield session
 
 
 async def get_current_user(
@@ -31,13 +32,12 @@ async def get_current_user(
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=str(e))
 
-    async with session.begin():
-        db_user = await crud.get_or_create_user(
-            session,
-            user_id=tg_user["id"],
-            username=tg_user.get("username"),
-            admin_ids=settings.admin_ids_list,
-        )
+    db_user = await crud.get_or_create_user(
+        session,
+        user_id=tg_user["id"],
+        username=tg_user.get("username"),
+        admin_ids=settings.admin_ids_list,
+    )
     return db_user
 
 

@@ -21,9 +21,7 @@ async def create_ip(session: AsyncSession, name: str, initial_capital: int) -> I
     if existing is not None:
         raise ValueError(f"ИП с именем «{name}» уже существует")
 
-    async with session.begin():
-        ip = await crud.create_ip(session, name=name, initial_capital=initial_capital)
-
+    ip = await crud.create_ip(session, name=name, initial_capital=initial_capital)
     logger.info("ИП «%s» создано, начальный капитал: %d ₽", name, initial_capital)
     return ip
 
@@ -35,12 +33,10 @@ async def set_initial_capital(
     Устанавливает начальный капитал ИП (только для админа).
     Обновляет bank_balance и initial_capital.
     """
-    async with session.begin():
-        ip = await crud.get_ip(session, ip_id)
-        if ip is None:
-            raise ValueError(f"ИП {ip_id} не найдено")
-        ip.initial_capital = amount
-        ip.bank_balance = amount
-
+    ip = await crud.get_ip(session, ip_id)
+    if ip is None:
+        raise ValueError(f"ИП {ip_id} не найдено")
+    ip.initial_capital = amount
+    ip.bank_balance = amount
     logger.info("ИП «%s»: установлен капитал %d ₽", ip.name, amount)
     return ip
