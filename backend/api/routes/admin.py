@@ -69,3 +69,9 @@ async def update_ip_balances(ip_id: int, body: IpBalancesRequest, _admin: User =
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
     return {"id": ip.id, "name": ip.name, "bank_balance": ip.bank_balance, "debit_balance": ip.debit_balance, "cash_balance": ip.cash_balance}
+
+
+@router.post("/reset")
+async def reset_all_data(_admin: User = Depends(get_admin_user), session: AsyncSession = Depends(get_session)) -> dict:
+    await crud.reset_all_data(session)
+    return {"success": True}

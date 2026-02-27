@@ -7,6 +7,51 @@ function fmt(n) {
   return new Intl.NumberFormat('ru-RU').format(n) + ' \u20bd'
 }
 
+function ResetConfirmModal({ onClose, onReset }) {
+  const [step, setStep] = useState(1)
+  const [loading, setLoading] = useState(false)
+
+  const handleConfirm = async () => {
+    if (step === 1) return setStep(2)
+    setLoading(true)
+    try {
+      await client.post('/admin/reset')
+      onReset()
+    } catch {
+      onClose()
+    }
+  }
+
+  return (
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.6)', display: 'flex', alignItems: 'flex-end', zIndex: 200 }}>
+      <div style={{ background: 'var(--bg)', borderRadius: '20px 20px 0 0', padding: '24px 16px', width: '100%' }}>
+        <div style={{ fontWeight: 700, fontSize: 18, marginBottom: 8, color: '#ff4444' }}>Сбросить все данные?</div>
+        {step === 1 && (
+          <div style={{ color: 'var(--hint)', fontSize: 14, marginBottom: 16 }}>
+            Будут удалены все ИП, транзакции и долги. Пользователи останутся. Это действие необратимо.
+          </div>
+        )}
+        {step === 2 && (
+          <div style={{ color: '#ff4444', fontSize: 14, marginBottom: 16, fontWeight: 600 }}>
+            Вы уверены? Нажмите «Удалить всё» для подтверждения.
+          </div>
+        )}
+        <div style={{ display: 'flex', gap: 8 }}>
+          <button className='btn btn-secondary' onClick={onClose} style={{ flex: 1 }}>Отмена</button>
+          <button
+            className='btn'
+            onClick={handleConfirm}
+            disabled={loading}
+            style={{ flex: 1, background: '#ff4444', color: '#fff' }}
+          >
+            {loading ? 'Удаление...' : step === 1 ? 'Продолжить' : 'Удалить всё'}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 function CreateIpModal({ onClose, onCreated }) {
   const [name, setName] = useState('')
   const [bank, setBank] = useState('')
@@ -117,6 +162,7 @@ export default function Admin({ currentUser }) {
   const [toast, setToast] = useState(null)
   const [showCreateIp, setShowCreateIp] = useState(false)
   const [editingIp, setEditingIp] = useState(null)
+  const [showReset, setShowReset] = useState(false)
 
   const loadData = () => {
     setLoading(true)
@@ -169,6 +215,12 @@ export default function Admin({ currentUser }) {
           }}
         />
       )}
+      {showReset && (
+        <ResetConfirmModal
+          onClose={() => setShowReset(false)}
+          onReset={() => { setShowReset(false); setIps([]); setToast('Все данные удалены') }}
+        />
+      )}
 
       <div className="page-header">Управление</div>
 
@@ -211,9 +263,14 @@ export default function Admin({ currentUser }) {
 
       {tab === 'ips' && (
         <div>
-          <button className="btn btn-primary" style={{ marginBottom: 16 }} onClick={() => setShowCreateIp(true)}>
-            + Создать ИП
-          </button>
+          <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
+            <button className="btn btn-primary" style={{ flex: 1 }} onClick={() => setShowCreateIp(true)}>
+              + Создать ИП
+            </button>
+            <button className="btn" style={{ background: '#ff4444', color: '#fff', width: 'auto', padding: '0 16px' }} onClick={() => setShowReset(true)}>
+              Сброс
+            </button>
+          </div>
           {ips.length === 0 && <div className="card"><div className="hint">ИП не созданы</div></div>}
           {ips.map(ip => (
             <div key={ip.id} className="card">

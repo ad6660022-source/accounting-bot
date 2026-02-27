@@ -1,7 +1,7 @@
 from __future__ import annotations
 import logging
 from datetime import datetime
-from sqlalchemy import select, and_
+from sqlalchemy import select, and_, delete
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 from backend.database.models import IpDebt, Transaction, User, IP
@@ -148,3 +148,15 @@ async def repay_ip_debt(session, debt_id, amount):
     if debt.amount == 0:
         debt.is_paid = True
     return debt
+
+
+async def reset_all_data(session: AsyncSession) -> None:
+    """Удаляет все ИП, транзакции, долги. Пользователи остаются."""
+    await session.execute(delete(IpDebt))
+    await session.execute(delete(Transaction))
+    await session.execute(delete(IP))
+    # Обнуляем cash_balance у пользователей
+    users = await get_all_users(session)
+    for u in users:
+        u.cash_balance = 0
+    logger.info("Все данные сброшены")
