@@ -1,49 +1,22 @@
-"""
-CRUD-операции с базой данных.
-Все функции принимают AsyncSession и НЕ управляют транзакциями самостоятельно —
-управление транзакциями лежит на сервисном слое.
-"""
-
 from __future__ import annotations
-
 import logging
 from datetime import datetime
-
 from sqlalchemy import select, and_
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
-
-from backend.database.models import Debt, IP, Transaction, User
+from backend.database.models import IpDebt, Transaction, User, IP
 
 logger = logging.getLogger(__name__)
 
-
-# ═══════════════════════════════════════════════════════════════════════════════
-# ПОЛЬЗОВАТЕЛИ
-# ═══════════════════════════════════════════════════════════════════════════════
-
-async def get_user(session: AsyncSession, user_id: int) -> User | None:
-    """Получить пользователя по Telegram ID."""
+async def get_user(session, user_id):
     result = await session.execute(select(User).where(User.id == user_id))
     return result.scalar_one_or_none()
 
-
-async def get_all_users(session: AsyncSession) -> list[User]:
-    """Получить всех зарегистрированных пользователей."""
+async def get_all_users(session):
     result = await session.execute(select(User).order_by(User.username))
     return list(result.scalars().all())
 
-
-async def get_or_create_user(
-    session: AsyncSession,
-    user_id: int,
-    username: str | None,
-    admin_ids: list[int] | None = None,
-) -> User:
-    """
-    Возвращает существующего пользователя или создаёт нового.
-    Если user_id есть в admin_ids — назначает роль admin.
-    """
+async def get_or_create_user(session, user_id, username, admin_ids=None):
     user = await get_user(session, user_id)
     if user is None:
         role = "admin" if (admin_ids and user_id in admin_ids) else "user"
@@ -52,56 +25,31 @@ async def get_or_create_user(
         await session.flush()
         logger.info("Новый пользователь: %s (роль: %s)", user.display_name, role)
     else:
-        # Обновляем username если изменился
         if user.username != username:
             user.username = username
     return user
 
-
-async def update_cash_balance(
-    session: AsyncSession, user_id: int, delta: int
-) -> User:
-    """Изменяет личный баланс пользователя на delta (может быть отрицательным)."""
+async def update_cash_balance(session, user_id, delta):
     user = await get_user(session, user_id)
     if user is None:
         raise ValueError(f"Пользователь {user_id} не найден")
     user.cash_balance += delta
     return user
 
-
-async def set_user_role(session: AsyncSession, user_id: int, role: str) -> User:
-    """Устанавливает роль пользователя (admin / user)."""
+async def set_user_role(session, user_id, role):
     user = await get_user(session, user_id)
     if user is None:
         raise ValueError(f"Пользователь {user_id} не найден")
     user.role = role
     return user
 
-
-# ═══════════════════════════════════════════════════════════════════════════════
-# ИНДИВИДУАЛЬНЫЕ ПРЕДПРИНИМАТЕЛИ
-# ═══════════════════════════════════════════════════════════════════════════════
-
-async def create_ip(
-    session: AsyncSession, name: str, bank_balance: int = 0, cash_balance: int = 0
-) -> IP:
-    """Создаёт новое ИП с указанными остатками на Р/С и в наличке."""
-    ip = IP(
-        name=name,
-        bank_balance=bank_balance,
-        cash_balance=cash_balance,
-        initial_capital=bank_balance + cash_balance,
-    )
+async def create_ip(session, name, bank_balance=0, cash_balance=0):
+    ip = IP(name=name, bank_balance=bank_balance, debit_balance=0, cash_balance=cash_balance, initial_capital=bank_balance + cash_balance)
     session.add(ip)
     await session.flush()
-    logger.info("Создано ИП: %s (Р/С: %d ₽, нал: %d ₽)", name, bank_balance, cash_balance)
     return ip
 
-
-async def set_ip_balances(
-    session: AsyncSession, ip_id: int, bank_balance: int, cash_balance: int
-) -> IP:
-    """Устанавливает балансы ИП напрямую (корректировка для админа)."""
+async def set_ip_balances(session, ip_id, bank_balance, cash_balance):
     ip = await get_ip(session, ip_id)
     if ip is None:
         raise ValueError(f"ИП {ip_id} не найдено")
@@ -109,80 +57,46 @@ async def set_ip_balances(
     ip.cash_balance = cash_balance
     return ip
 
-
-async def get_ip(session: AsyncSession, ip_id: int) -> IP | None:
-    """Получить ИП по ID."""
+async def get_ip(session, ip_id):
     result = await session.execute(select(IP).where(IP.id == ip_id))
     return result.scalar_one_or_none()
 
-
-async def get_ip_by_name(session: AsyncSession, name: str) -> IP | None:
-    """Получить ИП по названию."""
+async def get_ip_by_name(session, name):
     result = await session.execute(select(IP).where(IP.name == name))
     return result.scalar_one_or_none()
 
-
-async def get_all_ips(session: AsyncSession) -> list[IP]:
-    """Получить все ИП, отсортированные по имени."""
+async def get_all_ips(session):
     result = await session.execute(select(IP).order_by(IP.name))
     return list(result.scalars().all())
 
-
-async def update_ip_bank(session: AsyncSession, ip_id: int, delta: int) -> IP:
-    """Изменяет расчётный счёт ИП на delta."""
+async def update_ip_bank(session, ip_id, delta):
     ip = await get_ip(session, ip_id)
     if ip is None:
         raise ValueError(f"ИП {ip_id} не найдено")
     ip.bank_balance += delta
     return ip
 
+async def update_ip_debit(session, ip_id, delta):
+    ip = await get_ip(session, ip_id)
+    if ip is None:
+        raise ValueError(f"ИП {ip_id} не найдено")
+    ip.debit_balance += delta
+    return ip
 
-async def update_ip_cash(session: AsyncSession, ip_id: int, delta: int) -> IP:
-    """Изменяет наличные ИП на delta."""
+async def update_ip_cash(session, ip_id, delta):
     ip = await get_ip(session, ip_id)
     if ip is None:
         raise ValueError(f"ИП {ip_id} не найдено")
     ip.cash_balance += delta
     return ip
 
-
-# ═══════════════════════════════════════════════════════════════════════════════
-# ТРАНЗАКЦИИ
-# ═══════════════════════════════════════════════════════════════════════════════
-
-async def create_transaction(
-    session: AsyncSession,
-    user_id: int,
-    tx_type: str,
-    amount: int,
-    ip_id: int | None = None,
-    comment: str | None = None,
-) -> Transaction:
-    """Записывает финансовую операцию в историю."""
-    tx = Transaction(
-        user_id=user_id,
-        ip_id=ip_id,
-        type=tx_type,
-        amount=amount,
-        comment=comment,
-    )
+async def create_transaction(session, user_id, tx_type, amount, ip_id=None, comment=None):
+    tx = Transaction(user_id=user_id, ip_id=ip_id, type=tx_type, amount=amount, comment=comment)
     session.add(tx)
     await session.flush()
     return tx
 
-
-async def get_transactions(
-    session: AsyncSession,
-    *,
-    user_id: int | None = None,
-    ip_id: int | None = None,
-    since: datetime | None = None,
-    limit: int = 100,
-) -> list[Transaction]:
-    """
-    Получить историю операций с фильтрами.
-    Загружает связанные объекты user и ip.
-    """
+async def get_transactions(session, *, user_id=None, ip_id=None, since=None, limit=100):
     query = (
         select(Transaction)
         .options(selectinload(Transaction.user), selectinload(Transaction.ip))
@@ -198,76 +112,38 @@ async def get_transactions(
     if conditions:
         query = query.where(and_(*conditions))
     query = query.limit(limit)
-
     result = await session.execute(query)
     return list(result.scalars().all())
 
-
-# ═══════════════════════════════════════════════════════════════════════════════
-# ДОЛГИ
-# ═══════════════════════════════════════════════════════════════════════════════
-
-async def create_debt(
-    session: AsyncSession,
-    creditor_id: int,
-    debtor_id: int,
-    amount: int,
-) -> Debt:
-    """Создаёт новый долг."""
-    debt = Debt(creditor_id=creditor_id, debtor_id=debtor_id, amount=amount)
+async def create_ip_debt(session, creditor_ip_id, debtor_ip_id, amount):
+    debt = IpDebt(creditor_ip_id=creditor_ip_id, debtor_ip_id=debtor_ip_id, amount=amount)
     session.add(debt)
     await session.flush()
     return debt
 
-
-async def get_active_debts_for_user(
-    session: AsyncSession, user_id: int
-) -> tuple[list[Debt], list[Debt]]:
-    """
-    Возвращает (долги_где_кредитор=user, долги_где_должник=user).
-    Загружает связанных пользователей.
-    """
-    # Долги, где пользователь — кредитор (ему должны)
-    q_creditor = (
-        select(Debt)
-        .options(selectinload(Debt.debtor))
-        .where(Debt.creditor_id == user_id, Debt.is_paid.is_(False))
-    )
-    # Долги, где пользователь — должник (он должен)
-    q_debtor = (
-        select(Debt)
-        .options(selectinload(Debt.creditor))
-        .where(Debt.debtor_id == user_id, Debt.is_paid.is_(False))
-    )
-
-    r1 = await session.execute(q_creditor)
-    r2 = await session.execute(q_debtor)
-    return list(r1.scalars().all()), list(r2.scalars().all())
-
-
-async def get_debt_by_id(session: AsyncSession, debt_id: int) -> Debt | None:
-    """Получить долг по ID."""
+async def get_active_ip_debts(session):
     result = await session.execute(
-        select(Debt)
-        .options(selectinload(Debt.creditor), selectinload(Debt.debtor))
-        .where(Debt.id == debt_id)
+        select(IpDebt)
+        .options(selectinload(IpDebt.creditor_ip), selectinload(IpDebt.debtor_ip))
+        .where(IpDebt.is_paid.is_(False))
+        .order_by(IpDebt.created_at.desc())
+    )
+    return list(result.scalars().all())
+
+async def get_ip_debt_by_id(session, debt_id):
+    result = await session.execute(
+        select(IpDebt)
+        .options(selectinload(IpDebt.creditor_ip), selectinload(IpDebt.debtor_ip))
+        .where(IpDebt.id == debt_id)
     )
     return result.scalar_one_or_none()
 
-
-async def repay_debt(
-    session: AsyncSession, debt_id: int, amount: int
-) -> Debt:
-    """
-    Погашает часть или весь долг.
-    Если amount >= debt.amount — отмечает долг как погашенный.
-    """
-    debt = await get_debt_by_id(session, debt_id)
+async def repay_ip_debt(session, debt_id, amount):
+    debt = await get_ip_debt_by_id(session, debt_id)
     if debt is None:
         raise ValueError(f"Долг {debt_id} не найден")
     if debt.is_paid:
         raise ValueError("Долг уже погашен")
-
     debt.amount = max(0, debt.amount - amount)
     if debt.amount == 0:
         debt.is_paid = True

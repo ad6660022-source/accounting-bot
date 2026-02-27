@@ -223,8 +223,9 @@ export default function Admin({ currentUser }) {
                   Изменить
                 </button>
               </div>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 4, marginTop: 10 }}>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 4, marginTop: 10 }}>
                 <div><div className="card-title">Р/С</div><div style={{ fontWeight: 700 }}>{fmt(ip.bank_balance)}</div></div>
+                <div><div className="card-title">Дебет</div><div style={{ fontWeight: 700 }}>{fmt(ip.debit_balance ?? 0)}</div></div>
                 <div><div className="card-title">Наличные</div><div style={{ fontWeight: 700 }}>{fmt(ip.cash_balance)}</div></div>
               </div>
             </div>

@@ -23,15 +23,16 @@ from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 # ── Константы типов операций ──────────────────────────────────────────────────
 
 class TxType:
-    ZAKUP        = "zakup"        # Закуп (нал пользователя → нал ИП)
-    STORONNIE    = "storonnie"    # Посторонние траты (нал пользователя → -)
-    PRIHOD_MES   = "prihod_mes"   # Приход ежемесячный (+ нал пользователя)
-    PRIHOD_FAST  = "prihod_fast"  # Приход быстрый (+ нал пользователя)
-    PRIHOD_STO   = "prihod_sto"   # Приход сторонний (+ нал пользователя)
-    SNYAT_RS     = "snyat_rs"     # Снять с Р/С → личный баланс
-    VNESTI_RS    = "vnesti_rs"    # Внести на Р/С ← личный баланс
-    ODOLZHIT     = "odolzhit"     # Одолжить (нал кредитора → нал должника)
-    POGASIT      = "pogasit"      # Погашение долга
+    ZAKUP        = "zakup"        # Закуп (нал ИП → -)
+    STORONNIE    = "storonnie"    # Посторонние траты (нал ИП → -)
+    PRIHOD_MES   = "prihod_mes"   # Приход ежемесячный (+ нал ИП)
+    PRIHOD_FAST  = "prihod_fast"  # Приход быстрый (+ нал ИП)
+    PRIHOD_STO   = "prihod_sto"   # Приход сторонний (+ нал ИП)
+    SNYAT_RS     = "snyat_rs"     # Снять с Р/С → дебет ИП
+    SNYAT_DEBIT  = "snyat_debit"  # Снять с дебета → наличные ИП
+    VNESTI_RS    = "vnesti_rs"    # Внести на Р/С ← наличные ИП
+    ODOLZHIT     = "odolzhit"     # Одолжить (нал ИП → нал другого ИП)
+    POGASIT      = "pogasit"      # Погашение долга между ИП
 
 
 # Человекочитаемые названия операций
@@ -41,17 +42,12 @@ TX_LABELS: dict[str, str] = {
     TxType.PRIHOD_MES:  "📥 Приход ежемесячный",
     TxType.PRIHOD_FAST: "⚡ Приход быстрый",
     TxType.PRIHOD_STO:  "🏦 Приход сторонний",
-    TxType.SNYAT_RS:    "💴 Снять с Р/С",
+    TxType.SNYAT_RS:    "💴 Снять с Р/С → Дебет",
+    TxType.SNYAT_DEBIT: "💵 Снять с Дебета → Нал",
     TxType.VNESTI_RS:   "🏛 Внести на Р/С",
     TxType.ODOLZHIT:    "🤝 Одолжить",
     TxType.POGASIT:     "✅ Погашение долга",
 }
-
-# Типы, увеличивающие личный баланс пользователя
-INCOME_TYPES = {TxType.PRIHOD_MES, TxType.PRIHOD_FAST, TxType.PRIHOD_STO}
-
-# Типы, уменьшающие личный баланс пользователя
-EXPENSE_TYPES = {TxType.ZAKUP, TxType.STORONNIE}
 
 
 # ── Базовый класс ─────────────────────────────────────────────────────────────
@@ -68,16 +64,10 @@ class User(Base):
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True)  # Telegram ID
     username: Mapped[str | None] = mapped_column(String(255), nullable=True)
     role: Mapped[str] = mapped_column(String(20), default="user")  # admin / user
-    cash_balance: Mapped[int] = mapped_column(Integer, default=0)  # личные наличные
+    cash_balance: Mapped[int] = mapped_column(Integer, default=0)  # личные наличные (для долгов)
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
 
     transactions: Mapped[list["Transaction"]] = relationship(back_populates="user")
-    debts_as_creditor: Mapped[list["Debt"]] = relationship(
-        foreign_keys="Debt.creditor_id", back_populates="creditor"
-    )
-    debts_as_debtor: Mapped[list["Debt"]] = relationship(
-        foreign_keys="Debt.debtor_id", back_populates="debtor"
-    )
 
     @property
     def display_name(self) -> str:
@@ -92,6 +82,7 @@ class IP(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     name: Mapped[str] = mapped_column(String(100), unique=True)
     bank_balance: Mapped[int] = mapped_column(Integer, default=0)   # расчётный счёт
+    debit_balance: Mapped[int] = mapped_column(Integer, default=0)  # дебет (промежуточный)
     cash_balance: Mapped[int] = mapped_column(Integer, default=0)   # наличные ИП
     initial_capital: Mapped[int] = mapped_column(Integer, default=0)
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
@@ -118,21 +109,17 @@ class Transaction(Base):
     ip: Mapped["IP | None"] = relationship(back_populates="transactions")
 
 
-# ── Долги ─────────────────────────────────────────────────────────────────────
+# ── Долги между ИП ────────────────────────────────────────────────────────────
 
-class Debt(Base):
-    __tablename__ = "debts"
+class IpDebt(Base):
+    __tablename__ = "ip_debts"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    creditor_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("users.id"))
-    debtor_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("users.id"))
-    amount: Mapped[int] = mapped_column(Integer)  # текущий остаток долга
+    creditor_ip_id: Mapped[int] = mapped_column(Integer, ForeignKey("ips.id"))
+    debtor_ip_id: Mapped[int] = mapped_column(Integer, ForeignKey("ips.id"))
+    amount: Mapped[int] = mapped_column(Integer)
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
     is_paid: Mapped[bool] = mapped_column(Boolean, default=False)
 
-    creditor: Mapped["User"] = relationship(
-        foreign_keys=[creditor_id], back_populates="debts_as_creditor"
-    )
-    debtor: Mapped["User"] = relationship(
-        foreign_keys=[debtor_id], back_populates="debts_as_debtor"
-    )
+    creditor_ip: Mapped["IP"] = relationship(foreign_keys=[creditor_ip_id])
+    debtor_ip: Mapped["IP"] = relationship(foreign_keys=[debtor_ip_id])

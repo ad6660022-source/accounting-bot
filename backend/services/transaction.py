@@ -1,16 +1,5 @@
-"""
-Сервис проведения финансовых операций.
-Все операции выполняются в рамках транзакции, открытой в get_session.
-
-Концепция: деньги принадлежат ИП, не пользователям.
-- Все доходы/расходы работают с балансами ИП (наличные и Р/С).
-- Одолжить — перевод личных наличных между пользователями (долг).
-"""
-
 import logging
-
 from sqlalchemy.ext.asyncio import AsyncSession
-
 from backend.database import crud
 from backend.database.models import Transaction, TxType
 
@@ -18,28 +7,14 @@ logger = logging.getLogger(__name__)
 
 
 class InsufficientFundsError(ValueError):
-    """Недостаточно средств для операции."""
     pass
 
 
-async def process_operation(
-    session: AsyncSession,
-    user_id: int,
-    op_type: str,
-    amount: int,
-    ip_id: int | None = None,
-    target_user_id: int | None = None,
-    comment: str | None = None,
-) -> Transaction:
-    """
-    Проводит финансовую операцию атомарно.
-    Транзакция управляется на уровне get_session (одна на весь запрос).
-    """
+async def process_operation(session, user_id, op_type, amount, ip_id=None, target_ip_id=None, comment=None):
     user = await crud.get_user(session, user_id)
     if user is None:
         raise ValueError(f"Пользователь {user_id} не найден")
 
-    # ── Закуп (расход из наличных ИП) ────────────────────────────────────
     if op_type == TxType.ZAKUP:
         if ip_id is None:
             raise ValueError("Не указано ИП")
@@ -47,12 +22,10 @@ async def process_operation(
         if ip is None:
             raise ValueError("ИП не найдено")
         if ip.cash_balance < amount:
-            raise InsufficientFundsError(
-                f"Недостаточно наличных у ИП.\nОстаток: {ip.cash_balance:,} ₽"
-            )
+            raise InsufficientFundsError(f"Недостаточно наличных у ИП.
+Остаток: {ip.cash_balance:,} ₽")
         await crud.update_ip_cash(session, ip_id, -amount)
 
-    # ── Посторонние траты (расход из наличных ИП) ─────────────────────────
     elif op_type == TxType.STORONNIE:
         if ip_id is None:
             raise ValueError("Не указано ИП")
@@ -60,18 +33,15 @@ async def process_operation(
         if ip is None:
             raise ValueError("ИП не найдено")
         if ip.cash_balance < amount:
-            raise InsufficientFundsError(
-                f"Недостаточно наличных у ИП.\nОстаток: {ip.cash_balance:,} ₽"
-            )
+            raise InsufficientFundsError(f"Недостаточно наличных у ИП.
+Остаток: {ip.cash_balance:,} ₽")
         await crud.update_ip_cash(session, ip_id, -amount)
 
-    # ── Приходы (доход в наличные ИП) ────────────────────────────────────
     elif op_type in (TxType.PRIHOD_MES, TxType.PRIHOD_FAST, TxType.PRIHOD_STO):
         if ip_id is None:
             raise ValueError("Не указано ИП")
         await crud.update_ip_cash(session, ip_id, +amount)
 
-    # ── Снять с Р/С → наличные ИП ────────────────────────────────────────
     elif op_type == TxType.SNYAT_RS:
         if ip_id is None:
             raise ValueError("Не указано ИП")
@@ -79,13 +49,23 @@ async def process_operation(
         if ip is None:
             raise ValueError("ИП не найдено")
         if ip.bank_balance < amount:
-            raise InsufficientFundsError(
-                f"Недостаточно средств на Р/С.\nОстаток: {ip.bank_balance:,} ₽"
-            )
+            raise InsufficientFundsError(f"Недостаточно средств на Р/С.
+Остаток: {ip.bank_balance:,} ₽")
         await crud.update_ip_bank(session, ip_id, -amount)
+        await crud.update_ip_debit(session, ip_id, +amount)
+
+    elif op_type == TxType.SNYAT_DEBIT:
+        if ip_id is None:
+            raise ValueError("Не указано ИП")
+        ip = await crud.get_ip(session, ip_id)
+        if ip is None:
+            raise ValueError("ИП не найдено")
+        if ip.debit_balance < amount:
+            raise InsufficientFundsError(f"Недостаточно средств на Дебете.
+Остаток: {ip.debit_balance:,} ₽")
+        await crud.update_ip_debit(session, ip_id, -amount)
         await crud.update_ip_cash(session, ip_id, +amount)
 
-    # ── Внести на Р/С ← наличные ИП ──────────────────────────────────────
     elif op_type == TxType.VNESTI_RS:
         if ip_id is None:
             raise ValueError("Не указано ИП")
@@ -93,74 +73,49 @@ async def process_operation(
         if ip is None:
             raise ValueError("ИП не найдено")
         if ip.cash_balance < amount:
-            raise InsufficientFundsError(
-                f"Недостаточно наличных у ИП.\nОстаток: {ip.cash_balance:,} ₽"
-            )
+            raise InsufficientFundsError(f"Недостаточно наличных у ИП.
+Остаток: {ip.cash_balance:,} ₽")
         await crud.update_ip_cash(session, ip_id, -amount)
         await crud.update_ip_bank(session, ip_id, +amount)
 
-    # ── Одолжить (личные наличные пользователя → другому пользователю) ───
     elif op_type == TxType.ODOLZHIT:
-        if user.cash_balance < amount:
-            raise InsufficientFundsError(
-                f"Недостаточно наличных.\nВаш баланс: {user.cash_balance:,} ₽"
-            )
-        await crud.update_cash_balance(session, user_id, -amount)
-        await crud.update_cash_balance(session, target_user_id, +amount)
-        await crud.create_debt(session, user_id, target_user_id, amount)
+        if ip_id is None:
+            raise ValueError("Не указано ИП-кредитор")
+        if target_ip_id is None:
+            raise ValueError("Не указано ИП-заёмщик")
+        creditor_ip = await crud.get_ip(session, ip_id)
+        if creditor_ip is None:
+            raise ValueError("ИП-кредитор не найдено")
+        if creditor_ip.cash_balance < amount:
+            raise InsufficientFundsError(f"Недостаточно наличных у ИП.
+Остаток: {creditor_ip.cash_balance:,} ₽")
+        await crud.update_ip_cash(session, ip_id, -amount)
+        await crud.update_ip_cash(session, target_ip_id, +amount)
+        await crud.create_ip_debt(session, ip_id, target_ip_id, amount)
 
     else:
         raise ValueError(f"Неизвестный тип операции: {op_type}")
 
-    tx = await crud.create_transaction(
-        session,
-        user_id=user_id,
-        tx_type=op_type,
-        amount=amount,
-        ip_id=ip_id,
-        comment=comment,
-    )
-
-    logger.info(
-        "Операция [%s] user=%d amount=%d ip=%s",
-        op_type, user_id, amount, ip_id,
-    )
+    tx = await crud.create_transaction(session, user_id=user_id, tx_type=op_type, amount=amount, ip_id=ip_id, comment=comment)
+    logger.info("Операция [%s] user=%d amount=%d ip=%s", op_type, user_id, amount, ip_id)
     return tx
 
 
-async def repay_debt_operation(
-    session: AsyncSession,
-    debt_id: int,
-    payer_id: int,
-    amount: int,
-) -> Transaction:
-    """
-    Погашение долга: должник платит кредитору.
-    payer_id — Telegram ID того, кто гасит долг (должник).
-    """
-    debt = await crud.get_debt_by_id(session, debt_id)
+async def repay_ip_debt_operation(session, debt_id, amount, user_id):
+    debt = await crud.get_ip_debt_by_id(session, debt_id)
     if debt is None:
         raise ValueError("Долг не найден")
-    if debt.debtor_id != payer_id:
-        raise ValueError("Вы не являетесь должником по этому долгу")
-
-    payer = await crud.get_user(session, payer_id)
-    if payer.cash_balance < amount:
-        raise InsufficientFundsError(
-            f"Недостаточно наличных.\nВаш баланс: {payer.cash_balance:,} ₽"
-        )
-
-    await crud.update_cash_balance(session, payer_id, -amount)
-    await crud.update_cash_balance(session, debt.creditor_id, +amount)
-    await crud.repay_debt(session, debt_id, amount)
-
-    tx = await crud.create_transaction(
-        session,
-        user_id=payer_id,
-        tx_type=TxType.POGASIT,
-        amount=amount,
-        comment=f"Погашение долга #{debt_id}",
-    )
-
-    logger.info("Долг #%d погашен на %d ₽ пользователем %d", debt_id, amount, payer_id)
+    if debt.is_paid:
+        raise ValueError("Долг уже погашен")
+    if amount > debt.amount:
+        raise ValueError(f"Сумма превышает остаток долга: {debt.amount:,} ₽")
+    debtor_ip = await crud.get_ip(session, debt.debtor_ip_id)
+    if debtor_ip.cash_balance < amount:
+        raise InsufficientFundsError(f"Недостаточно наличных у ИП-заёмщика.
+Остаток: {debtor_ip.cash_balance:,} ₽")
+    await crud.update_ip_cash(session, debt.debtor_ip_id, -amount)
+    await crud.update_ip_cash(session, debt.creditor_ip_id, +amount)
+    await crud.repay_ip_debt(session, debt_id, amount)
+    tx = await crud.create_transaction(session, user_id=user_id, tx_type=TxType.POGASIT, amount=amount, ip_id=debt.creditor_ip_id, comment=f"Погашение долга #{debt_id}")
+    logger.info("Долг ИП #%d погашен на %d ₽", debt_id, amount)
     return tx
