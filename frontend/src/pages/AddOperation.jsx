@@ -6,15 +6,21 @@ import Toast from "../components/Toast"
 const tg = window.Telegram?.WebApp
 
 const OPERATIONS = [
-  { type: "zakup",       icon: "🛒", label: "Закуп",            needsIp: true,  needsTargetIp: false, needsComment: false },
-  { type: "storonnie",   icon: "💸", label: "Посторонние траты", needsIp: true,  needsTargetIp: false, needsComment: true  },
-  { type: "prihod_mes",  icon: "📥", label: "Приход ежемес.",   needsIp: true,  needsTargetIp: false, needsComment: false },
-  { type: "prihod_fast", icon: "⚡", label: "Приход быстрый",   needsIp: true,  needsTargetIp: false, needsComment: false },
-  { type: "prihod_sto",  icon: "🏦", label: "Приход сторонний", needsIp: true,  needsTargetIp: false, needsComment: true  },
-  { type: "snyat_rs",    icon: "💴", label: "Снять с Р/С",      needsIp: true,  needsTargetIp: false, needsComment: false },
-  { type: "snyat_debit", icon: "💵", label: "Снять с Дебета",   needsIp: true,  needsTargetIp: false, needsComment: false },
-  { type: "vnesti_rs",   icon: "🏛",  label: "Внести на Р/С",    needsIp: true,  needsTargetIp: false, needsComment: false },
-  { type: "odolzhit",    icon: "🤝", label: "Одолжить",         needsIp: true,  needsTargetIp: true,  needsComment: false },
+  { type: "zakup",       icon: "🛒", label: "Закуп",            needsIp: true,  needsTargetIp: false, needsComment: true,  needsDestination: false },
+  { type: "storonnie",   icon: "💸", label: "Посторонние траты", needsIp: true,  needsTargetIp: false, needsComment: true,  needsDestination: false },
+  { type: "prihod_mes",  icon: "📥", label: "Приход ежемес.",   needsIp: true,  needsTargetIp: false, needsComment: false, needsDestination: true  },
+  { type: "prihod_fast", icon: "⚡", label: "Приход быстрый",   needsIp: true,  needsTargetIp: false, needsComment: false, needsDestination: true  },
+  { type: "prihod_sto",  icon: "🏦", label: "Приход сторонний", needsIp: true,  needsTargetIp: false, needsComment: true,  needsDestination: true  },
+  { type: "snyat_rs",    icon: "💴", label: "Снять с Р/С",      needsIp: true,  needsTargetIp: false, needsComment: false, needsDestination: false },
+  { type: "snyat_debit", icon: "💵", label: "Снять с Дебета",   needsIp: true,  needsTargetIp: false, needsComment: false, needsDestination: false },
+  { type: "vnesti_rs",   icon: "🏛",  label: "Внести на Р/С",    needsIp: true,  needsTargetIp: false, needsComment: false, needsDestination: false },
+  { type: "odolzhit",    icon: "🤝", label: "Одолжить",         needsIp: true,  needsTargetIp: true,  needsComment: false, needsDestination: false },
+]
+
+const DESTINATIONS = [
+  { value: "cash", label: "Наличные" },
+  { value: "bank", label: "Р/С" },
+  { value: "debit", label: "Дебет" },
 ]
 
 function fmt(n) {
@@ -32,6 +38,7 @@ export default function AddOperation({ setPage }) {
   const [selectedTargetIp, setSelectedTargetIp] = useState("")
   const [amount, setAmount] = useState("")
   const [comment, setComment] = useState("")
+  const [destination, setDestination] = useState("cash")
 
   useEffect(() => {
     client.get("/balance")
@@ -58,10 +65,11 @@ export default function AddOperation({ setPage }) {
         ip_id: selectedIp ? parseInt(selectedIp) : null,
         target_ip_id: selectedTargetIp ? parseInt(selectedTargetIp) : null,
         comment: comment.trim() || null,
+        destination: op?.needsDestination ? destination : null,
       })
       tg?.HapticFeedback?.notificationOccurred("success")
       setToast("✅ Операция проведена!")
-      setSelectedOp(null); setSelectedIp(""); setSelectedTargetIp(""); setAmount(""); setComment("")
+      setSelectedOp(null); setSelectedIp(""); setSelectedTargetIp(""); setAmount(""); setComment(""); setDestination("cash")
     } catch (e) {
       tg?.HapticFeedback?.notificationOccurred("error")
       setToast("❌ " + (e.response?.data?.detail || "Ошибка"))
@@ -82,7 +90,7 @@ export default function AddOperation({ setPage }) {
           <button
             key={o.type}
             className={"op-btn " + (selectedOp === o.type ? "selected" : "")}
-            onClick={() => { setSelectedOp(o.type); setSelectedIp(""); setSelectedTargetIp("") }}
+            onClick={() => { setSelectedOp(o.type); setSelectedIp(""); setSelectedTargetIp(""); setDestination("cash") }}
           >
             <span className="op-btn-icon">{o.icon}</span>
             <span className="op-btn-label">{o.label}</span>
@@ -113,6 +121,24 @@ export default function AddOperation({ setPage }) {
               <option key={ip.id} value={ip.id}>{ip.name}</option>
             ))}
           </select>
+        </div>
+      )}
+
+      {op?.needsDestination && (
+        <div className="input-group">
+          <label className="input-label">Куда зачислить</label>
+          <div style={{ display: "flex", gap: 8 }}>
+            {DESTINATIONS.map(d => (
+              <button
+                key={d.value}
+                className={"btn " + (destination === d.value ? "btn-primary" : "btn-secondary")}
+                style={{ flex: 1 }}
+                onClick={() => setDestination(d.value)}
+              >
+                {d.label}
+              </button>
+            ))}
+          </div>
         </div>
       )}
 

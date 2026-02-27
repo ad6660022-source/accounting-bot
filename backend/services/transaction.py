@@ -10,7 +10,7 @@ class InsufficientFundsError(ValueError):
     pass
 
 
-async def process_operation(session, user_id, op_type, amount, ip_id=None, target_ip_id=None, comment=None):
+async def process_operation(session, user_id, op_type, amount, ip_id=None, target_ip_id=None, comment=None, destination=None):
     user = await crud.get_user(session, user_id)
     if user is None:
         raise ValueError(f"Пользователь {user_id} не найден")
@@ -38,7 +38,13 @@ async def process_operation(session, user_id, op_type, amount, ip_id=None, targe
     elif op_type in (TxType.PRIHOD_MES, TxType.PRIHOD_FAST, TxType.PRIHOD_STO):
         if ip_id is None:
             raise ValueError("Не указано ИП")
-        await crud.update_ip_cash(session, ip_id, +amount)
+        dest = destination or "cash"
+        if dest == "bank":
+            await crud.update_ip_bank(session, ip_id, +amount)
+        elif dest == "debit":
+            await crud.update_ip_debit(session, ip_id, +amount)
+        else:
+            await crud.update_ip_cash(session, ip_id, +amount)
 
     elif op_type == TxType.SNYAT_RS:
         if ip_id is None:

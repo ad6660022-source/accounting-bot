@@ -16,6 +16,7 @@ class OperationRequest(BaseModel):
     ip_id: Optional[int] = None
     target_ip_id: Optional[int] = None
     comment: Optional[str] = None
+    destination: Optional[str] = None  # cash / bank / debit (для приходов)
 
     @field_validator("amount")
     @classmethod
@@ -40,6 +41,7 @@ async def create_operation(
             ip_id=body.ip_id,
             target_ip_id=body.target_ip_id,
             comment=body.comment,
+            destination=body.destination,
         )
     except InsufficientFundsError as e:
         raise HTTPException(status_code=400, detail=str(e))
