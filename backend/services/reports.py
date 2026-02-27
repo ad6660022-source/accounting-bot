@@ -9,7 +9,7 @@ from datetime import datetime, timedelta, timezone
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.database import crud
-from backend.database.models import EXPENSE_TYPES, INCOME_TYPES, TxType
+from backend.database.models import EXPENSE_TYPES, INCOME_TYPES
 
 
 PERIOD_LABELS = {
@@ -21,7 +21,6 @@ PERIOD_LABELS = {
 
 
 def _period_start(period: str) -> datetime | None:
-    """Возвращает дату начала периода (UTC) или None для 'всё время'."""
     now = datetime.now(tz=timezone.utc)
     if period == "today":
         return now.replace(hour=0, minute=0, second=0, microsecond=0)
@@ -29,44 +28,30 @@ def _period_start(period: str) -> datetime | None:
         return now - timedelta(days=7)
     if period == "month":
         return now - timedelta(days=30)
-    return None  # all
+    return None
 
 
 async def get_personal_report(
     session: AsyncSession, user_id: int, period: str
 ) -> str:
-    """
-    Формирует текстовую сводку для конкретного пользователя.
-    Включает: личные приходы/расходы, балансы ИП, долги.
-    """
     since = _period_start(period)
     label = PERIOD_LABELS.get(period, period)
 
-    # Транзакции пользователя за период
     txs = await crud.get_transactions(session, user_id=user_id, since=since)
     income = sum(t.amount for t in txs if t.type in INCOME_TYPES)
     expense = sum(t.amount for t in txs if t.type in EXPENSE_TYPES)
 
-    # Текущий баланс
-    user = await crud.get_user(session, user_id)
-    user_cash = user.cash_balance if user else 0
-
-    # Балансы ИП
     ips = await crud.get_all_ips(session)
-
-    # Долги
-    owed_to_me, i_owe = await crud.get_active_debts_for_user(session, user_id)
-    total_owed_to_me = sum(d.amount for d in owed_to_me)
-    total_i_owe = sum(d.amount for d in i_owe)
+    ip_debts = await crud.get_active_ip_debts(session)
 
     def fmt(n: int) -> str:
-        return f"{n:,}".replace(",", "\u202f") + " ₽"
+        return f"{n:,}".replace(",", " ") + " ₽"
 
     lines = [
-        f"📊 <b>Сводка {label}</b>\n",
+        f"📊 <b>Сводка {label}</b>
+",
         f"📥 Приход:  <b>+{fmt(income)}</b>",
         f"📤 Расход:  <b>-{fmt(expense)}</b>",
-        f"💳 Ваш баланс (нал): <b>{fmt(user_cash)}</b>",
         "",
         "🏦 <b>Балансы ИП:</b>",
     ]
@@ -74,16 +59,17 @@ async def get_personal_report(
     if ips:
         for ip in ips:
             lines.append(
-                f"  • {ip.name}: Р/С {fmt(ip.bank_balance)} | Нал {fmt(ip.cash_balance)}"
+                f"  • {ip.name}: Р/С {fmt(ip.bank_balance)} | Деб {fmt(ip.debit_balance)} | Нал {fmt(ip.cash_balance)}"
             )
     else:
         lines.append("  нет ИП")
 
-    lines += [
-        "",
-        "💰 <b>Долги:</b>",
-        f"  Вам должны: {fmt(total_owed_to_me)}",
-        f"  Вы должны:  {fmt(total_i_owe)}",
-    ]
+    if ip_debts:
+        lines += ["", "🔴 <b>Долги между ИП:</b>"]
+        for d in ip_debts:
+            lines.append(f"  • {d.debtor_ip.name} → {d.creditor_ip.name}: {fmt(d.amount)}")
+    else:
+        lines += ["", "✅ Долгов между ИП нет"]
 
-    return "\n".join(lines)
+    return "
+".join(lines)

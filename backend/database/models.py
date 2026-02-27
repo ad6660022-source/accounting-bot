@@ -35,6 +35,17 @@ class TxType:
     POGASIT      = "pogasit"      # Погашение долга между ИП
 
 
+# Группы типов для отчётов
+INCOME_TYPES: frozenset[str] = frozenset({
+    TxType.PRIHOD_MES,
+    TxType.PRIHOD_FAST,
+    TxType.PRIHOD_STO,
+})
+EXPENSE_TYPES: frozenset[str] = frozenset({
+    TxType.ZAKUP,
+    TxType.STORONNIE,
+})
+
 # Человекочитаемые названия операций
 TX_LABELS: dict[str, str] = {
     TxType.ZAKUP:       "🛒 Закуп",

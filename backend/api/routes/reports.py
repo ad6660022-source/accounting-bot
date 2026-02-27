@@ -1,5 +1,3 @@
-"""Сводки и отчёты."""
-
 from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -17,7 +15,6 @@ async def get_report(
     current_user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
 ) -> dict:
-    """Финансовая сводка за период: today / week / month / all."""
     since = _period_start(period)
     txs = await crud.get_transactions(session, user_id=current_user.id, since=since)
 
@@ -25,22 +22,28 @@ async def get_report(
     expense = sum(t.amount for t in txs if t.type in EXPENSE_TYPES)
 
     ips = await crud.get_all_ips(session)
-    owed_to_me, i_owe = await crud.get_active_debts_for_user(session, current_user.id)
+    ip_debts = await crud.get_active_ip_debts(session)
 
     return {
         "period": period,
         "income": income,
         "expense": expense,
-        "user_cash": current_user.cash_balance,
         "ips": [
             {
                 "id": ip.id,
                 "name": ip.name,
                 "bank_balance": ip.bank_balance,
+                "debit_balance": ip.debit_balance,
                 "cash_balance": ip.cash_balance,
             }
             for ip in ips
         ],
-        "total_owed_to_me": sum(d.amount for d in owed_to_me),
-        "total_i_owe": sum(d.amount for d in i_owe),
+        "ip_debts": [
+            {
+                "debtor_ip_name": d.debtor_ip.name,
+                "creditor_ip_name": d.creditor_ip.name,
+                "amount": d.amount,
+            }
+            for d in ip_debts
+        ],
     }
