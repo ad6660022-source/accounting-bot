@@ -1,6 +1,10 @@
 """
 Сервис проведения финансовых операций.
 Все операции выполняются в рамках транзакции, открытой в get_session.
+
+Концепция: деньги принадлежат ИП, не пользователям.
+- Все доходы/расходы работают с балансами ИП (наличные и Р/С).
+- Одолжить — перевод личных наличных между пользователями (долг).
 """
 
 import logging
@@ -35,29 +39,42 @@ async def process_operation(
     if user is None:
         raise ValueError(f"Пользователь {user_id} не найден")
 
-    # ── Закуп ────────────────────────────────────────────────────────────
+    # ── Закуп (расход из наличных ИП) ────────────────────────────────────
     if op_type == TxType.ZAKUP:
-        if user.cash_balance < amount:
+        if ip_id is None:
+            raise ValueError("Не указано ИП")
+        ip = await crud.get_ip(session, ip_id)
+        if ip is None:
+            raise ValueError("ИП не найдено")
+        if ip.cash_balance < amount:
             raise InsufficientFundsError(
-                f"Недостаточно наличных.\nВаш баланс: {user.cash_balance:,} ₽"
+                f"Недостаточно наличных у ИП.\nОстаток: {ip.cash_balance:,} ₽"
             )
-        await crud.update_cash_balance(session, user_id, -amount)
+        await crud.update_ip_cash(session, ip_id, -amount)
+
+    # ── Посторонние траты (расход из наличных ИП) ─────────────────────────
+    elif op_type == TxType.STORONNIE:
+        if ip_id is None:
+            raise ValueError("Не указано ИП")
+        ip = await crud.get_ip(session, ip_id)
+        if ip is None:
+            raise ValueError("ИП не найдено")
+        if ip.cash_balance < amount:
+            raise InsufficientFundsError(
+                f"Недостаточно наличных у ИП.\nОстаток: {ip.cash_balance:,} ₽"
+            )
+        await crud.update_ip_cash(session, ip_id, -amount)
+
+    # ── Приходы (доход в наличные ИП) ────────────────────────────────────
+    elif op_type in (TxType.PRIHOD_MES, TxType.PRIHOD_FAST, TxType.PRIHOD_STO):
+        if ip_id is None:
+            raise ValueError("Не указано ИП")
         await crud.update_ip_cash(session, ip_id, +amount)
 
-    # ── Посторонние траты ─────────────────────────────────────────────────
-    elif op_type == TxType.STORONNIE:
-        if user.cash_balance < amount:
-            raise InsufficientFundsError(
-                f"Недостаточно наличных.\nВаш баланс: {user.cash_balance:,} ₽"
-            )
-        await crud.update_cash_balance(session, user_id, -amount)
-
-    # ── Приходы ───────────────────────────────────────────────────────────
-    elif op_type in (TxType.PRIHOD_MES, TxType.PRIHOD_FAST, TxType.PRIHOD_STO):
-        await crud.update_cash_balance(session, user_id, +amount)
-
-    # ── Снять с Р/С → личный баланс ──────────────────────────────────────
+    # ── Снять с Р/С → наличные ИП ────────────────────────────────────────
     elif op_type == TxType.SNYAT_RS:
+        if ip_id is None:
+            raise ValueError("Не указано ИП")
         ip = await crud.get_ip(session, ip_id)
         if ip is None:
             raise ValueError("ИП не найдено")
@@ -66,18 +83,23 @@ async def process_operation(
                 f"Недостаточно средств на Р/С.\nОстаток: {ip.bank_balance:,} ₽"
             )
         await crud.update_ip_bank(session, ip_id, -amount)
-        await crud.update_cash_balance(session, user_id, +amount)
+        await crud.update_ip_cash(session, ip_id, +amount)
 
-    # ── Внести на Р/С ← личный баланс ────────────────────────────────────
+    # ── Внести на Р/С ← наличные ИП ──────────────────────────────────────
     elif op_type == TxType.VNESTI_RS:
-        if user.cash_balance < amount:
+        if ip_id is None:
+            raise ValueError("Не указано ИП")
+        ip = await crud.get_ip(session, ip_id)
+        if ip is None:
+            raise ValueError("ИП не найдено")
+        if ip.cash_balance < amount:
             raise InsufficientFundsError(
-                f"Недостаточно наличных.\nВаш баланс: {user.cash_balance:,} ₽"
+                f"Недостаточно наличных у ИП.\nОстаток: {ip.cash_balance:,} ₽"
             )
-        await crud.update_cash_balance(session, user_id, -amount)
+        await crud.update_ip_cash(session, ip_id, -amount)
         await crud.update_ip_bank(session, ip_id, +amount)
 
-    # ── Одолжить ─────────────────────────────────────────────────────────
+    # ── Одолжить (личные наличные пользователя → другому пользователю) ───
     elif op_type == TxType.ODOLZHIT:
         if user.cash_balance < amount:
             raise InsufficientFundsError(

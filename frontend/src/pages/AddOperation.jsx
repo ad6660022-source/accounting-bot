@@ -7,10 +7,10 @@ const tg = window.Telegram?.WebApp
 
 const OPERATIONS = [
   { type: 'zakup',       icon: '🛒', label: 'Закуп',            needsIp: true,  needsUser: false, needsComment: false },
-  { type: 'storonnie',   icon: '💸', label: 'Посторонние траты', needsIp: false, needsUser: false, needsComment: true  },
-  { type: 'prihod_mes',  icon: '📥', label: 'Приход ежемес.',   needsIp: false, needsUser: false, needsComment: false },
-  { type: 'prihod_fast', icon: '⚡', label: 'Приход быстрый',   needsIp: false, needsUser: false, needsComment: false },
-  { type: 'prihod_sto',  icon: '🏦', label: 'Приход сторонний', needsIp: false, needsUser: false, needsComment: true  },
+  { type: 'storonnie',   icon: '💸', label: 'Посторонние траты', needsIp: true,  needsUser: false, needsComment: true  },
+  { type: 'prihod_mes',  icon: '📥', label: 'Приход ежемес.',   needsIp: true,  needsUser: false, needsComment: false },
+  { type: 'prihod_fast', icon: '⚡', label: 'Приход быстрый',   needsIp: true,  needsUser: false, needsComment: false },
+  { type: 'prihod_sto',  icon: '🏦', label: 'Приход сторонний', needsIp: true,  needsUser: false, needsComment: true  },
   { type: 'snyat_rs',    icon: '💴', label: 'Снять с Р/С',      needsIp: true,  needsUser: false, needsComment: false },
   { type: 'vnesti_rs',   icon: '🏛',  label: 'Внести на Р/С',    needsIp: true,  needsUser: false, needsComment: false },
   { type: 'odolzhit',    icon: '🤝', label: 'Одолжить',         needsIp: false, needsUser: true,  needsComment: false },
@@ -55,7 +55,7 @@ export default function AddOperation({ setPage }) {
 
     setSubmitting(true)
     try {
-      const res = await client.post('/operations', {
+      await client.post('/operations', {
         op_type: selectedOp,
         amount: amt,
         ip_id: selectedIp ? parseInt(selectedIp) : null,
@@ -63,8 +63,7 @@ export default function AddOperation({ setPage }) {
         comment: comment.trim() || null,
       })
       tg?.HapticFeedback?.notificationOccurred('success')
-      setToast(`✅ Готово! Баланс: ${fmt(res.data.new_balance)}`)
-      // Сбрасываем форму
+      setToast('✅ Операция проведена!')
       setSelectedOp(null); setSelectedIp(''); setSelectedUser(''); setAmount(''); setComment('')
     } catch (e) {
       tg?.HapticFeedback?.notificationOccurred('error')
@@ -126,17 +125,19 @@ export default function AddOperation({ setPage }) {
       )}
 
       {/* Сумма */}
-      <div className="input-group">
-        <label className="input-label">Сумма (₽)</label>
-        <input
-          className="input-field"
-          type="number"
-          inputMode="numeric"
-          placeholder="Например: 5000"
-          value={amount}
-          onChange={e => setAmount(e.target.value)}
-        />
-      </div>
+      {selectedOp && (
+        <div className="input-group">
+          <label className="input-label">Сумма (₽)</label>
+          <input
+            className="input-field"
+            type="number"
+            inputMode="numeric"
+            placeholder="Например: 5000"
+            value={amount}
+            onChange={e => setAmount(e.target.value)}
+          />
+        </div>
+      )}
 
       {/* Комментарий */}
       {op?.needsComment && (
@@ -153,14 +154,16 @@ export default function AddOperation({ setPage }) {
       )}
 
       {/* Кнопка */}
-      <button
-        className="btn btn-primary"
-        onClick={handleSubmit}
-        disabled={submitting}
-        style={{ marginTop: 8 }}
-      >
-        {submitting ? '⏳ Обработка...' : '✅ Провести операцию'}
-      </button>
+      {selectedOp && (
+        <button
+          className="btn btn-primary"
+          onClick={handleSubmit}
+          disabled={submitting}
+          style={{ marginTop: 8 }}
+        >
+          {submitting ? '⏳ Обработка...' : '✅ Провести операцию'}
+        </button>
+      )}
     </div>
   )
 }

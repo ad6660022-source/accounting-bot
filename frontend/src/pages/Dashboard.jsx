@@ -34,13 +34,24 @@ export default function Dashboard({ user, setPage }) {
         )}
       </div>
 
-      {/* Личный баланс */}
-      <div className="card" style={{ background: 'var(--btn)', color: 'var(--btn-text)', borderRadius: 'var(--radius)' }}>
-        <div style={{ fontSize: 12, opacity: .8, fontWeight: 600, textTransform: 'uppercase', letterSpacing: .5 }}>
-          💳 Ваши наличные
+      {/* Общий бюджет */}
+      <div className="card" style={{ background: 'var(--btn)', color: 'var(--btn-text)', borderRadius: 'var(--radius)', marginBottom: 16 }}>
+        <div style={{ fontSize: 12, opacity: .8, fontWeight: 600, textTransform: 'uppercase', letterSpacing: .5, marginBottom: 10 }}>
+          💰 Общий бюджет (все ИП)
         </div>
-        <div style={{ fontSize: 34, fontWeight: 800, marginTop: 6, lineHeight: 1.1 }}>
-          {fmt(balance?.user?.cash_balance ?? 0)}
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+          <div>
+            <div style={{ fontSize: 11, opacity: .75, marginBottom: 2 }}>🏦 Р/С (сумма)</div>
+            <div style={{ fontSize: 22, fontWeight: 800, lineHeight: 1.1 }}>
+              {fmt(balance?.total_bank ?? 0)}
+            </div>
+          </div>
+          <div>
+            <div style={{ fontSize: 11, opacity: .75, marginBottom: 2 }}>💵 Наличные (сумма)</div>
+            <div style={{ fontSize: 22, fontWeight: 800, lineHeight: 1.1 }}>
+              {fmt(balance?.total_cash ?? 0)}
+            </div>
+          </div>
         </div>
       </div>
 

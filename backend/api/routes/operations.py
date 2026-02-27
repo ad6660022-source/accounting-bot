@@ -51,12 +51,9 @@ async def create_operation(
     except ValueError as e:
         raise HTTPException(status_code=422, detail=str(e))
 
-    # Обновлённый баланс пользователя
-    updated_user = await crud.get_user(session, current_user.id)
     return {
         "success": True,
         "transaction_id": tx.id,
-        "new_balance": updated_user.cash_balance,
     }
 
 

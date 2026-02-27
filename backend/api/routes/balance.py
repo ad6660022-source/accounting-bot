@@ -1,4 +1,4 @@
-"""Балансы пользователя и ИП."""
+"""Балансы ИП и общий бюджет."""
 
 from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -15,19 +15,21 @@ async def get_balance(
     current_user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
 ) -> dict:
-    """Возвращает личный баланс и балансы всех ИП."""
+    """Возвращает балансы всех ИП и суммарный бюджет."""
     ips = await crud.get_all_ips(session)
+    ip_list = [
+        {
+            "id": ip.id,
+            "name": ip.name,
+            "bank_balance": ip.bank_balance,
+            "cash_balance": ip.cash_balance,
+        }
+        for ip in ips
+    ]
+    total_bank = sum(ip.bank_balance for ip in ips)
+    total_cash = sum(ip.cash_balance for ip in ips)
     return {
-        "user": {
-            "cash_balance": current_user.cash_balance,
-        },
-        "ips": [
-            {
-                "id": ip.id,
-                "name": ip.name,
-                "bank_balance": ip.bank_balance,
-                "cash_balance": ip.cash_balance,
-            }
-            for ip in ips
-        ],
+        "total_bank": total_bank,
+        "total_cash": total_cash,
+        "ips": ip_list,
     }
