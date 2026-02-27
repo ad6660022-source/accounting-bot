@@ -25,6 +25,16 @@ class Settings(BaseSettings):
         "postgresql+asyncpg://postgres:secret@localhost:5432/accounting_bot"
     )
 
+    @property
+    def async_database_url(self) -> str:
+        """Гарантирует использование asyncpg-драйвера."""
+        url = self.database_url.strip()
+        if url.startswith("postgresql://"):
+            url = url.replace("postgresql://", "postgresql+asyncpg://", 1)
+        elif url.startswith("postgres://"):
+            url = url.replace("postgres://", "postgresql+asyncpg://", 1)
+        return url
+
     # ── Администраторы (Telegram ID через запятую) ────────────────────────────
     admin_ids: str = ""
 

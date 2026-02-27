@@ -13,7 +13,7 @@ logger = logging.getLogger(__name__)
 
 # Асинхронный движок PostgreSQL (asyncpg)
 engine = create_async_engine(
-    settings.database_url,
+    settings.async_database_url,
     echo=False,       # True — выводит SQL-запросы в лог (для отладки)
     pool_size=10,
     max_overflow=20,
