@@ -10,11 +10,11 @@ const PERIODS = [
 ]
 
 function fmt(n) {
-  return new Intl.NumberFormat('ru-RU').format(n) + ' ₽'
+  return new Intl.NumberFormat('ru-RU').format(n ?? 0) + ' ₽'
 }
 
 export default function Report() {
-  const [period, setPeriod] = useState('month')
+  const [period, setPeriod] = useState('all')
   const [data, setData] = useState(null)
   const [loading, setLoading] = useState(true)
 
@@ -30,7 +30,6 @@ export default function Report() {
     <div className="page-content">
       <div className="page-header">📊 Сводка</div>
 
-      {/* Выбор периода */}
       <div className="period-tabs">
         {PERIODS.map(p => (
           <button
@@ -45,7 +44,6 @@ export default function Report() {
 
       {loading ? <Loader /> : data && (
         <>
-          {/* Приход / Расход */}
           <div className="report-grid">
             <div className="report-card">
               <div className="report-label">📥 Приход</div>
@@ -57,17 +55,6 @@ export default function Report() {
             </div>
           </div>
 
-          {/* Личный баланс */}
-          <div className="card" style={{ background: 'var(--btn)', color: 'var(--btn-text)' }}>
-            <div style={{ fontSize: 12, opacity: .8, fontWeight: 600, textTransform: 'uppercase', letterSpacing: .5 }}>
-              💳 Ваши наличные
-            </div>
-            <div style={{ fontSize: 28, fontWeight: 800, marginTop: 4 }}>
-              {fmt(data.user_cash)}
-            </div>
-          </div>
-
-          {/* Балансы ИП */}
           {data.ips?.length > 0 && (
             <>
               <div className="section-title">🏦 Балансы ИП</div>
@@ -80,6 +67,10 @@ export default function Report() {
                       <span className="ip-val">{fmt(ip.bank_balance)}</span>
                     </div>
                     <div className="ip-row">
+                      <span className="ip-label">Дебет</span>
+                      <span className="ip-val">{fmt(ip.debit_balance)}</span>
+                    </div>
+                    <div className="ip-row">
                       <span className="ip-label">Нал</span>
                       <span className="ip-val">{fmt(ip.cash_balance)}</span>
                     </div>
@@ -89,18 +80,19 @@ export default function Report() {
             </>
           )}
 
-          {/* Долги */}
-          <div className="section-title">💰 Долги</div>
-          <div className="report-grid">
-            <div className="report-card">
-              <div className="report-label">Вам должны</div>
-              <div className="report-value green">{fmt(data.total_owed_to_me)}</div>
-            </div>
-            <div className="report-card">
-              <div className="report-label">Вы должны</div>
-              <div className="report-value red">{fmt(data.total_i_owe)}</div>
-            </div>
-          </div>
+          {data.ip_debts?.length > 0 && (
+            <>
+              <div className="section-title">🔴 Долги между ИП</div>
+              {data.ip_debts.map((d, i) => (
+                <div key={i} className="debt-item" style={{ pointerEvents: 'none' }}>
+                  <div className="debt-info">
+                    <div className="debt-name">{d.debtor_ip_name} → {d.creditor_ip_name}</div>
+                    <div className="debt-amount">{fmt(d.amount)}</div>
+                  </div>
+                </div>
+              ))}
+            </>
+          )}
         </>
       )}
     </div>

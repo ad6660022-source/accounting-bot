@@ -12,11 +12,11 @@ router = APIRouter()
 @router.get("/report/{period}")
 async def get_report(
     period: str,
-    current_user: User = Depends(get_current_user),
+    _current_user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
 ) -> dict:
     since = _period_start(period)
-    txs = await crud.get_transactions(session, user_id=current_user.id, since=since)
+    txs = await crud.get_transactions(session, since=since)
 
     income = sum(t.amount for t in txs if t.type in INCOME_TYPES)
     expense = sum(t.amount for t in txs if t.type in EXPENSE_TYPES)
