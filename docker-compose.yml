@@ -1,0 +1,39 @@
+version: "3.9"
+
+services:
+  # ── База данных ──────────────────────────────────────────────────────────────
+  db:
+    image: postgres:15-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: accounting_bot
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-secret}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d accounting_bot"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # ── Бот + API сервер ─────────────────────────────────────────────────────────
+  bot:
+    build: .
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql+asyncpg://postgres:${POSTGRES_PASSWORD:-secret}@db:5432/accounting_bot
+      PORT: 8000
+    ports:
+      - "8000:8000"   # FastAPI / Mini App
+    volumes:
+      - ./data:/app/data
+
+volumes:
+  postgres_data:
