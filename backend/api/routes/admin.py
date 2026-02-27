@@ -8,6 +8,7 @@ from backend.api.deps import get_admin_user, get_session
 from backend.database import crud
 from backend.database.models import User
 from backend.services.ip_manager import create_ip as svc_create_ip
+from backend.services.ip_manager import update_ip_balances as svc_update_ip_balances
 
 router = APIRouter()
 
@@ -76,20 +77,50 @@ async def list_ips(
     ]
 
 
-class IpRequest(BaseModel):
+class IpCreateRequest(BaseModel):
     name: str
-    initial_capital: int
+    bank_balance: int = 0
+    cash_balance: int = 0
 
 
 @router.post("/ips")
 async def create_ip(
-    body: IpRequest,
+    body: IpCreateRequest,
     _admin: User = Depends(get_admin_user),
     session: AsyncSession = Depends(get_session),
 ) -> dict:
     """Создать новое ИП."""
     try:
-        ip = await svc_create_ip(session, body.name.strip(), body.initial_capital)
+        ip = await svc_create_ip(
+            session,
+            body.name.strip(),
+            bank_balance=body.bank_balance,
+            cash_balance=body.cash_balance,
+        )
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
-    return {"id": ip.id, "name": ip.name, "bank_balance": ip.bank_balance}
+    return {"id": ip.id, "name": ip.name, "bank_balance": ip.bank_balance, "cash_balance": ip.cash_balance}
+
+
+class IpBalancesRequest(BaseModel):
+    bank_balance: int
+    cash_balance: int
+
+
+@router.patch("/ips/{ip_id}/balances")
+async def update_ip_balances(
+    ip_id: int,
+    body: IpBalancesRequest,
+    _admin: User = Depends(get_admin_user),
+    session: AsyncSession = Depends(get_session),
+) -> dict:
+    """Скорректировать остатки ИП (Р/С и наличка)."""
+    try:
+        ip = await svc_update_ip_balances(
+            session, ip_id,
+            bank_balance=body.bank_balance,
+            cash_balance=body.cash_balance,
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    return {"id": ip.id, "name": ip.name, "bank_balance": ip.bank_balance, "cash_balance": ip.cash_balance}

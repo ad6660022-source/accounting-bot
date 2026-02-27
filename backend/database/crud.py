@@ -83,13 +83,30 @@ async def set_user_role(session: AsyncSession, user_id: int, role: str) -> User:
 # ═══════════════════════════════════════════════════════════════════════════════
 
 async def create_ip(
-    session: AsyncSession, name: str, initial_capital: int
+    session: AsyncSession, name: str, bank_balance: int = 0, cash_balance: int = 0
 ) -> IP:
-    """Создаёт новое ИП. initial_capital идёт на расчётный счёт."""
-    ip = IP(name=name, bank_balance=initial_capital, initial_capital=initial_capital)
+    """Создаёт новое ИП с указанными остатками на Р/С и в наличке."""
+    ip = IP(
+        name=name,
+        bank_balance=bank_balance,
+        cash_balance=cash_balance,
+        initial_capital=bank_balance + cash_balance,
+    )
     session.add(ip)
     await session.flush()
-    logger.info("Создано ИП: %s (капитал: %d ₽)", name, initial_capital)
+    logger.info("Создано ИП: %s (Р/С: %d ₽, нал: %d ₽)", name, bank_balance, cash_balance)
+    return ip
+
+
+async def set_ip_balances(
+    session: AsyncSession, ip_id: int, bank_balance: int, cash_balance: int
+) -> IP:
+    """Устанавливает балансы ИП напрямую (корректировка для админа)."""
+    ip = await get_ip(session, ip_id)
+    if ip is None:
+        raise ValueError(f"ИП {ip_id} не найдено")
+    ip.bank_balance = bank_balance
+    ip.cash_balance = cash_balance
     return ip
 
 

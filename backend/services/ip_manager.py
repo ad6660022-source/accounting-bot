@@ -12,31 +12,26 @@ from backend.database.models import IP
 logger = logging.getLogger(__name__)
 
 
-async def create_ip(session: AsyncSession, name: str, initial_capital: int) -> IP:
+async def create_ip(
+    session: AsyncSession, name: str, bank_balance: int = 0, cash_balance: int = 0
+) -> IP:
     """
-    Создаёт новое ИП и зачисляет начальный капитал на расчётный счёт.
+    Создаёт новое ИП с начальными остатками на Р/С и в наличке.
     Проверяет, что ИП с таким именем ещё не существует.
     """
     existing = await crud.get_ip_by_name(session, name)
     if existing is not None:
         raise ValueError(f"ИП с именем «{name}» уже существует")
 
-    ip = await crud.create_ip(session, name=name, initial_capital=initial_capital)
-    logger.info("ИП «%s» создано, начальный капитал: %d ₽", name, initial_capital)
+    ip = await crud.create_ip(session, name=name, bank_balance=bank_balance, cash_balance=cash_balance)
+    logger.info("ИП «%s» создано (Р/С: %d ₽, нал: %d ₽)", name, bank_balance, cash_balance)
     return ip
 
 
-async def set_initial_capital(
-    session: AsyncSession, ip_id: int, amount: int
+async def update_ip_balances(
+    session: AsyncSession, ip_id: int, bank_balance: int, cash_balance: int
 ) -> IP:
-    """
-    Устанавливает начальный капитал ИП (только для админа).
-    Обновляет bank_balance и initial_capital.
-    """
-    ip = await crud.get_ip(session, ip_id)
-    if ip is None:
-        raise ValueError(f"ИП {ip_id} не найдено")
-    ip.initial_capital = amount
-    ip.bank_balance = amount
-    logger.info("ИП «%s»: установлен капитал %d ₽", ip.name, amount)
+    """Устанавливает балансы ИП (корректировка для админа)."""
+    ip = await crud.set_ip_balances(session, ip_id, bank_balance, cash_balance)
+    logger.info("ИП id=%d: Р/С=%d ₽, нал=%d ₽", ip_id, bank_balance, cash_balance)
     return ip
