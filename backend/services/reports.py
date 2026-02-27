@@ -45,13 +45,14 @@ async def get_personal_report(
     ip_debts = await crud.get_active_ip_debts(session)
 
     def fmt(n: int) -> str:
-        return f"{n:,}".replace(",", " ") + " ₽"
+        return f"{n:,}".replace(",", "\u202f") + " \u20bd"
 
+    header = "📊 <b>Сводка " + label + "</b>"
     lines = [
-        f"📊 <b>Сводка {label}</b>
-",
-        f"📥 Приход:  <b>+{fmt(income)}</b>",
-        f"📤 Расход:  <b>-{fmt(expense)}</b>",
+        header,
+        "",
+        "📥 Приход:  <b>+" + fmt(income) + "</b>",
+        "📤 Расход:  <b>-" + fmt(expense) + "</b>",
         "",
         "🏦 <b>Балансы ИП:</b>",
     ]
@@ -59,7 +60,9 @@ async def get_personal_report(
     if ips:
         for ip in ips:
             lines.append(
-                f"  • {ip.name}: Р/С {fmt(ip.bank_balance)} | Деб {fmt(ip.debit_balance)} | Нал {fmt(ip.cash_balance)}"
+                "  \u2022 " + ip.name + ": Р/С " + fmt(ip.bank_balance)
+                + " | Деб " + fmt(ip.debit_balance)
+                + " | Нал " + fmt(ip.cash_balance)
             )
     else:
         lines.append("  нет ИП")
@@ -67,9 +70,8 @@ async def get_personal_report(
     if ip_debts:
         lines += ["", "🔴 <b>Долги между ИП:</b>"]
         for d in ip_debts:
-            lines.append(f"  • {d.debtor_ip.name} → {d.creditor_ip.name}: {fmt(d.amount)}")
+            lines.append("  \u2022 " + d.debtor_ip.name + " \u2192 " + d.creditor_ip.name + ": " + fmt(d.amount))
     else:
         lines += ["", "✅ Долгов между ИП нет"]
 
-    return "
-".join(lines)
+    return "\n".join(lines)
