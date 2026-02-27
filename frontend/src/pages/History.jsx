@@ -9,12 +9,13 @@ const TX_ICONS = {
   prihod_fast: '⚡',
   prihod_sto:  '🏦',
   snyat_rs:    '💴',
+  snyat_debit: '💵',
   vnesti_rs:   '🏛',
   odolzhit:    '🤝',
   pogasit:     '✅',
 }
 
-const PLUS_TYPES  = new Set(['prihod_mes', 'prihod_fast', 'prihod_sto', 'snyat_rs', 'pogasit'])
+const PLUS_TYPES  = new Set(['prihod_mes', 'prihod_fast', 'prihod_sto', 'pogasit'])
 const MINUS_TYPES = new Set(['zakup', 'storonnie', 'vnesti_rs', 'odolzhit'])
 
 function fmt(n) {
@@ -30,7 +31,7 @@ export default function History() {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    client.get('/transactions?limit=100')
+    client.get('/transactions?limit=200')
       .then(r => setTxs(r.data))
       .catch(console.error)
       .finally(() => setLoading(false))
@@ -51,16 +52,18 @@ export default function History() {
             const isMinus = MINUS_TYPES.has(tx.type)
             const cls = isPlus ? 'plus' : isMinus ? 'minus' : 'neutral'
             const sign = isPlus ? '+' : isMinus ? '-' : ''
+            const meta = [
+              tx.ip_name,
+              tx.user_name,
+              tx.comment,
+              formatDate(tx.created_at),
+            ].filter(Boolean).join(' • ')
             return (
               <div key={tx.id} className="tx-item">
                 <div className="tx-icon">{TX_ICONS[tx.type] || '💰'}</div>
                 <div className="tx-info">
                   <div className="tx-type">{tx.type_label}</div>
-                  <div className="tx-meta">
-                    {tx.ip_name ? `${tx.ip_name} • ` : ''}
-                    {tx.comment ? `${tx.comment} • ` : ''}
-                    {formatDate(tx.created_at)}
-                  </div>
+                  <div className="tx-meta">{meta}</div>
                 </div>
                 <div className={`tx-amount ${cls}`}>{sign}{fmt(tx.amount)}</div>
               </div>

@@ -52,11 +52,11 @@ async def create_operation(
 
 @router.get("/transactions")
 async def get_transactions(
-    limit: int = 50,
-    current_user: User = Depends(get_current_user),
+    limit: int = 100,
+    _current_user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
 ) -> list:
-    txs = await crud.get_transactions(session, user_id=current_user.id, limit=limit)
+    txs = await crud.get_transactions(session, limit=limit)
     return [
         {
             "id": tx.id,
@@ -64,6 +64,7 @@ async def get_transactions(
             "type_label": TX_LABELS.get(tx.type, tx.type),
             "amount": tx.amount,
             "ip_name": tx.ip.name if tx.ip else None,
+            "user_name": tx.user.display_name if tx.user else None,
             "comment": tx.comment,
             "created_at": tx.created_at.isoformat(),
         }
