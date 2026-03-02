@@ -127,10 +127,14 @@ body {
   height: 68px;
   z-index: 100;
   padding-bottom: env(safe-area-inset-bottom);
+  overflow-x: auto;
+  scrollbar-width: none;
 }
+.bottom-nav::-webkit-scrollbar { display: none; }
 
 .nav-item {
   flex: 1;
+  min-width: 56px;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -411,3 +415,15 @@ select.input-field {
 .ip-row { display: flex; justify-content: space-between; font-size: 12px; }
 .ip-label { color: var(--hint); }
 .ip-val { font-weight: 600; }
+
+/* ── Отменённые транзакции ───────────────────────────────────────────────── */
+.tx-item.cancelled {
+  opacity: 0.5;
+}
+
+.tx-item.cancelled .tx-amount {
+  text-decoration: line-through;
+  color: var(--hint) !important;
+}
+
+.tx-amount.cancelled { color: var(--hint); text-decoration: line-through; }

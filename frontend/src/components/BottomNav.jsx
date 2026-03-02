@@ -6,10 +6,12 @@ export default function BottomNav({ page, setPage, userRole }) {
     { id: 'dashboard', icon: '🏠', label: 'Главная' },
   ]
   if (!isJunior) items.push({ id: 'operation', icon: '➕', label: 'Операция' })
+  if (!isJunior) items.push({ id: 'expenses', icon: '💰', label: 'Расходы' })
   items.push(
-    { id: 'history', icon: '📋', label: 'История' },
-    { id: 'debts',   icon: '🔴', label: 'Долги' },
-    { id: 'report',  icon: '📊', label: 'Сводка' },
+    { id: 'history',   icon: '📋', label: 'История' },
+    { id: 'debts',     icon: '🔴', label: 'Долги' },
+    { id: 'report',    icon: '📊', label: 'Сводка' },
+    { id: 'analytics', icon: '📈', label: 'Аналитика' },
   )
   if (isAdmin) items.push({ id: 'admin', icon: '⚙️', label: 'Управление' })
 

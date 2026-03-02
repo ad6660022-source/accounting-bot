@@ -1,10 +1,10 @@
 from __future__ import annotations
 import logging
 from datetime import datetime
-from sqlalchemy import select, and_, delete
+from sqlalchemy import select, and_, delete, or_
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
-from backend.database.models import IpDebt, Transaction, User, IP
+from backend.database.models import Expense, IpDebt, Transaction, User, IP
 
 logger = logging.getLogger(__name__)
 
@@ -96,7 +96,7 @@ async def create_transaction(session, user_id, tx_type, amount, ip_id=None, comm
     await session.flush()
     return tx
 
-async def get_transactions(session, *, user_id=None, ip_id=None, since=None, limit=100):
+async def get_transactions(session, *, user_id=None, ip_id=None, since=None, limit=100, include_cancelled=False):
     query = (
         select(Transaction)
         .options(selectinload(Transaction.user), selectinload(Transaction.ip))
@@ -109,11 +109,22 @@ async def get_transactions(session, *, user_id=None, ip_id=None, since=None, lim
         conditions.append(Transaction.ip_id == ip_id)
     if since is not None:
         conditions.append(Transaction.created_at >= since)
+    if not include_cancelled:
+        conditions.append(Transaction.is_cancelled.is_(False))
     if conditions:
         query = query.where(and_(*conditions))
     query = query.limit(limit)
     result = await session.execute(query)
     return list(result.scalars().all())
+
+
+async def get_transaction(session, tx_id: int):
+    result = await session.execute(
+        select(Transaction)
+        .options(selectinload(Transaction.user), selectinload(Transaction.ip))
+        .where(Transaction.id == tx_id)
+    )
+    return result.scalar_one_or_none()
 
 async def create_ip_debt(session, creditor_ip_id, debtor_ip_id, amount):
     debt = IpDebt(creditor_ip_id=creditor_ip_id, debtor_ip_id=debtor_ip_id, amount=amount)
@@ -150,10 +161,40 @@ async def repay_ip_debt(session, debt_id, amount):
     return debt
 
 
+async def create_expense(session, user_id: int, description: str, amount: int) -> Expense:
+    expense = Expense(user_id=user_id, description=description, amount=amount)
+    session.add(expense)
+    await session.flush()
+    return expense
+
+
+async def get_expenses(session, limit: int = 100) -> list[Expense]:
+    result = await session.execute(
+        select(Expense).order_by(Expense.created_at.desc()).limit(limit)
+    )
+    return list(result.scalars().all())
+
+
+async def get_expense(session, expense_id: int):
+    result = await session.execute(select(Expense).where(Expense.id == expense_id))
+    return result.scalar_one_or_none()
+
+
+async def get_writeoffs_for_expense(session, expense_id: int) -> list[Transaction]:
+    result = await session.execute(
+        select(Transaction)
+        .options(selectinload(Transaction.ip))
+        .where(Transaction.expense_id == expense_id, Transaction.is_cancelled.is_(False))
+        .order_by(Transaction.created_at.asc())
+    )
+    return list(result.scalars().all())
+
+
 async def reset_all_data(session: AsyncSession) -> None:
-    """Удаляет все ИП, транзакции, долги. Пользователи остаются."""
+    """Удаляет все ИП, транзакции, долги, расходы. Пользователи остаются."""
     await session.execute(delete(IpDebt))
     await session.execute(delete(Transaction))
+    await session.execute(delete(Expense))
     await session.execute(delete(IP))
     # Обнуляем cash_balance у пользователей
     users = await get_all_users(session)

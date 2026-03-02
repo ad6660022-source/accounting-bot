@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import client from '../api/client'
 import Loader from '../components/Loader'
+import Toast from '../components/Toast'
 
 const PERIODS = [
   { key: 'today', label: 'Сегодня' },
@@ -17,30 +18,54 @@ export default function Report() {
   const [period, setPeriod] = useState('all')
   const [data, setData] = useState(null)
   const [loading, setLoading] = useState(true)
+  const [sending, setSending] = useState(false)
+  const [toast, setToast] = useState(null)
 
   useEffect(() => {
     setLoading(true)
-    client.get(`/report/${period}`)
+    client.get('/report/' + period)
       .then(r => setData(r.data))
       .catch(console.error)
       .finally(() => setLoading(false))
   }, [period])
 
+  const handleSendSummary = async () => {
+    setSending(true)
+    try {
+      await client.post('/summary/send')
+      setToast('✅ Сводка отправлена в Telegram!')
+    } catch {
+      setToast('❌ Ошибка отправки')
+    } finally {
+      setSending(false)
+    }
+  }
+
   return (
     <div className="page-content">
+      {toast && <Toast message={toast} onDone={() => setToast(null)} />}
       <div className="page-header">📊 Сводка</div>
 
       <div className="period-tabs">
         {PERIODS.map(p => (
           <button
             key={p.key}
-            className={`period-tab ${period === p.key ? 'active' : ''}`}
+            className={'period-tab ' + (period === p.key ? 'active' : '')}
             onClick={() => setPeriod(p.key)}
           >
             {p.label}
           </button>
         ))}
       </div>
+
+      <button
+        className="btn btn-secondary"
+        onClick={handleSendSummary}
+        disabled={sending}
+        style={{ marginBottom: 12 }}
+      >
+        {sending ? '⏳ Отправка...' : '📤 Отправить в Telegram'}
+      </button>
 
       {loading ? <Loader /> : data && (
         <>

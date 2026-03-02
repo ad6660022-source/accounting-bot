@@ -42,6 +42,20 @@ async def init_db() -> None:
         await conn.execute(text(
             "ALTER TABLE transactions ADD COLUMN IF NOT EXISTS destination VARCHAR(20)"
         ))
+        # Миграция: expense_id для связи с таблицей расходов
+        await conn.execute(text(
+            "ALTER TABLE transactions ADD COLUMN IF NOT EXISTS expense_id INTEGER"
+        ))
+        # Миграция: поля для отмены операций
+        await conn.execute(text(
+            "ALTER TABLE transactions ADD COLUMN IF NOT EXISTS is_cancelled BOOLEAN NOT NULL DEFAULT FALSE"
+        ))
+        await conn.execute(text(
+            "ALTER TABLE transactions ADD COLUMN IF NOT EXISTS cancelled_at TIMESTAMP"
+        ))
+        await conn.execute(text(
+            "ALTER TABLE transactions ADD COLUMN IF NOT EXISTS cancelled_by_id BIGINT"
+        ))
         # Создаём все новые таблицы (существующие не трогает)
         await conn.run_sync(Base.metadata.create_all)
     logger.info("База данных инициализирована")

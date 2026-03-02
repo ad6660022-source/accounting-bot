@@ -41,6 +41,9 @@ async def run_bot() -> None:
         token=settings.telegram_bot_token,
         default=DefaultBotProperties(parse_mode=ParseMode.HTML),
     )
+    # Делаем бот доступным для FastAPI-роутеров (например, /summary/send)
+    fastapi_app.state.bot = bot
+
     await setup_bot_commands(bot)
 
     dp = Dispatcher(storage=MemoryStorage())

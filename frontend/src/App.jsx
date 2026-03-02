@@ -7,6 +7,8 @@ import History from './pages/History'
 import Debts from './pages/Debts'
 import Report from './pages/Report'
 import Admin from './pages/Admin'
+import Expenses from './pages/Expenses'
+import Analytics from './pages/Analytics'
 import Loader from './components/Loader'
 
 export default function App() {
@@ -36,13 +38,15 @@ export default function App() {
 
   const renderPage = () => {
     switch (page) {
-      case 'dashboard': return <Dashboard user={user} setPage={setPage} />
-      case 'operation': return <AddOperation user={user} />
-      case 'history':   return <History user={user} />
-      case 'debts':     return <Debts user={user} />
-      case 'report':    return <Report />
-      case 'admin':     return <Admin currentUser={user} />
-      default:          return <Dashboard user={user} setPage={setPage} />
+      case 'dashboard':  return <Dashboard user={user} setPage={setPage} />
+      case 'operation':  return <AddOperation user={user} />
+      case 'expenses':   return <Expenses user={user} />
+      case 'history':    return <History user={user} />
+      case 'debts':      return <Debts user={user} />
+      case 'report':     return <Report user={user} />
+      case 'analytics':  return <Analytics user={user} />
+      case 'admin':      return <Admin currentUser={user} />
+      default:           return <Dashboard user={user} setPage={setPage} />
     }
   }
 

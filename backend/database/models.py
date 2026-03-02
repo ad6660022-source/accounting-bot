@@ -23,16 +23,17 @@ from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 # ── Константы типов операций ──────────────────────────────────────────────────
 
 class TxType:
-    ZAKUP        = "zakup"        # Закуп (нал ИП → -)
-    STORONNIE    = "storonnie"    # Посторонние траты (нал ИП → -)
-    PRIHOD_MES   = "prihod_mes"   # Приход ежемесячный (+ нал ИП)
-    PRIHOD_FAST  = "prihod_fast"  # Приход быстрый (+ нал ИП)
-    PRIHOD_STO   = "prihod_sto"   # Приход сторонний (+ нал ИП)
-    SNYAT_RS     = "snyat_rs"     # Снять с Р/С → дебет ИП
-    SNYAT_DEBIT  = "snyat_debit"  # Снять с дебета → наличные ИП
-    VNESTI_RS    = "vnesti_rs"    # Внести на Р/С ← наличные ИП
-    ODOLZHIT     = "odolzhit"     # Одолжить (нал ИП → нал другого ИП)
-    POGASIT      = "pogasit"      # Погашение долга между ИП
+    ZAKUP            = "zakup"            # Закуп (нал ИП → -)
+    STORONNIE        = "storonnie"        # Посторонние траты (нал ИП → -)
+    PRIHOD_MES       = "prihod_mes"       # Приход ежемесячный (+ нал ИП)
+    PRIHOD_FAST      = "prihod_fast"      # Приход быстрый (+ нал ИП)
+    PRIHOD_STO       = "prihod_sto"       # Приход сторонний (+ нал ИП)
+    SNYAT_RS         = "snyat_rs"         # Снять с Р/С → дебет ИП
+    SNYAT_DEBIT      = "snyat_debit"      # Снять с дебета → наличные ИП
+    VNESTI_RS        = "vnesti_rs"        # Внести на Р/С ← наличные ИП
+    ODOLZHIT         = "odolzhit"         # Одолжить (нал ИП → нал другого ИП)
+    POGASIT          = "pogasit"          # Погашение долга между ИП
+    EXPENSE_WRITEOFF = "expense_writeoff" # Расход (списание с ИП)
 
 
 # Группы типов для отчётов
@@ -48,16 +49,17 @@ EXPENSE_TYPES: frozenset[str] = frozenset({
 
 # Человекочитаемые названия операций
 TX_LABELS: dict[str, str] = {
-    TxType.ZAKUP:       "🛒 Закуп",
-    TxType.STORONNIE:   "💸 Посторонние траты",
-    TxType.PRIHOD_MES:  "📥 Приход ежемесячный",
-    TxType.PRIHOD_FAST: "⚡ Приход быстрый",
-    TxType.PRIHOD_STO:  "🏦 Приход сторонний",
-    TxType.SNYAT_RS:    "💴 Снять с Р/С → Дебет",
-    TxType.SNYAT_DEBIT: "💵 Снять с Дебета → Нал",
-    TxType.VNESTI_RS:   "🏛 Внести на Р/С",
-    TxType.ODOLZHIT:    "🤝 Одолжить",
-    TxType.POGASIT:     "✅ Погашение долга",
+    TxType.ZAKUP:            "🛒 Закуп",
+    TxType.STORONNIE:        "💸 Посторонние траты",
+    TxType.PRIHOD_MES:       "📥 Приход ежемесячный",
+    TxType.PRIHOD_FAST:      "⚡ Приход быстрый",
+    TxType.PRIHOD_STO:       "🏦 Приход сторонний",
+    TxType.SNYAT_RS:         "💴 Снять с Р/С → Дебет",
+    TxType.SNYAT_DEBIT:      "💵 Снять с Дебета → Нал",
+    TxType.VNESTI_RS:        "🏛 Внести на Р/С",
+    TxType.ODOLZHIT:         "🤝 Одолжить",
+    TxType.POGASIT:          "✅ Погашение долга",
+    TxType.EXPENSE_WRITEOFF: "💰 Расход (списание)",
 }
 
 
@@ -115,10 +117,28 @@ class Transaction(Base):
     amount: Mapped[int] = mapped_column(Integer)
     comment: Mapped[str | None] = mapped_column(Text, nullable=True)
     destination: Mapped[str | None] = mapped_column(String(20), nullable=True)  # cash / bank / debit (для приходов)
+    expense_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("expenses.id"), nullable=True)
+    is_cancelled: Mapped[bool] = mapped_column(Boolean, default=False)
+    cancelled_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    cancelled_by_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
 
     user: Mapped["User"] = relationship(back_populates="transactions")
     ip: Mapped["IP | None"] = relationship(back_populates="transactions")
+
+
+# ── Расходы (журнал расходов) ─────────────────────────────────────────────────
+
+class Expense(Base):
+    __tablename__ = "expenses"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    description: Mapped[str] = mapped_column(Text)
+    amount: Mapped[int] = mapped_column(Integer)  # заявленная сумма (информационно)
+    user_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("users.id"))
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+
+    user: Mapped["User"] = relationship()
 
 
 # ── Долги между ИП ────────────────────────────────────────────────────────────

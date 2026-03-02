@@ -10,7 +10,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
-from backend.api.routes import admin, balance, debts, export, me, operations, reports, users
+from backend.api.routes import admin, analytics, balance, debts, export, expenses, me, operations, reports, summary, users
 
 logger = logging.getLogger(__name__)
 
@@ -34,6 +34,9 @@ app.include_router(reports.router, prefix="/api", tags=["reports"])
 app.include_router(users.router, prefix="/api", tags=["users"])
 app.include_router(admin.router, prefix="/api/admin", tags=["admin"])
 app.include_router(export.router, prefix="/api", tags=["export"])
+app.include_router(expenses.router, prefix="/api", tags=["expenses"])
+app.include_router(summary.router, prefix="/api", tags=["summary"])
+app.include_router(analytics.router, prefix="/api", tags=["analytics"])
 
 # Раздача статических файлов фронтенда (монтируем ПОСЛЕ всех API-роутеров)
 _static_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "static")
