@@ -6,6 +6,7 @@
 import io
 from datetime import date
 from typing import Optional
+from urllib.parse import quote
 
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
@@ -37,11 +38,12 @@ async def export_excel(
     excel_bytes = generate_excel(ip, all_txs, date_from=date_from, date_to=date_to)
 
     today = date.today().strftime("%Y-%m-%d")
-    safe_name = ip.name.replace(" ", "_")
-    filename = f"{safe_name}_{today}.xlsx"
+    filename = f"{ip.name}_{today}.xlsx"
+    # RFC 5987 encoding — поддерживает любые Unicode-символы в имени файла
+    encoded_filename = quote(filename)
 
     return StreamingResponse(
         io.BytesIO(excel_bytes),
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+        headers={"Content-Disposition": f"attachment; filename*=UTF-8''{encoded_filename}"},
     )
