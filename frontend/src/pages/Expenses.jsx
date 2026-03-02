@@ -261,6 +261,90 @@ function ConfirmModal({ title, text, danger, confirmLabel, onClose, onConfirm })
   )
 }
 
+// ── Модалка: закрыть все расходы ─────────────────────────────────────────────
+
+function CloseAllModal({ openExpenses, ips, totalRemaining, onClose, onDone }) {
+  const [entries, setEntries] = useState(
+    Object.fromEntries(ips.map(ip => [ip.id, { amount: '', source: 'cash' }]))
+  )
+  const [loading, setLoading] = useState(false)
+  const [toast, setToast] = useState(null)
+
+  const totalNew = ips.reduce((sum, ip) => sum + (parseInt(entries[ip.id]?.amount, 10) || 0), 0)
+
+  const handleSubmit = async () => {
+    const toPost = ips
+      .map(ip => ({ ip_id: ip.id, amount: parseInt(entries[ip.id]?.amount, 10) || 0, source: entries[ip.id]?.source || 'cash' }))
+      .filter(e => e.amount > 0)
+    if (toPost.length === 0) return setToast('Введите сумму хотя бы для одного ИП')
+    setLoading(true)
+    try {
+      // Бюджет по каждому ИП
+      const budget = toPost.map(e => ({ ...e, left: e.amount }))
+      // Распределяем по открытым расходам (от старых к новым)
+      for (const exp of openExpenses) {
+        const writtenOff = exp.writeoffs.reduce((s, w) => s + w.amount, 0)
+        let expLeft = exp.amount - writtenOff
+        if (expLeft <= 0) continue
+        for (const b of budget) {
+          if (b.left <= 0) continue
+          const toWrite = Math.min(expLeft, b.left)
+          if (toWrite > 0) {
+            await client.post('/expenses/' + exp.id + '/writeoffs', { ip_id: b.ip_id, amount: toWrite, source: b.source })
+            b.left -= toWrite
+            expLeft -= toWrite
+          }
+          if (expLeft <= 0) break
+        }
+        if (expLeft <= 0) {
+          await client.patch('/expenses/' + exp.id + '/close')
+        }
+      }
+      onDone()
+    } catch (e) {
+      setToast('Ошибка: ' + (e.response?.data?.detail || 'неизвестная'))
+      setLoading(false)
+    }
+  }
+
+  return (
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.5)', display: 'flex', alignItems: 'flex-end', zIndex: 200 }}>
+      {toast && <Toast message={toast} onDone={() => setToast(null)} />}
+      <div style={{ background: 'var(--bg)', borderRadius: '20px 20px 0 0', padding: '24px 16px', width: '100%', maxHeight: '85vh', overflowY: 'auto' }}>
+        <div style={{ fontWeight: 700, fontSize: 18, marginBottom: 2 }}>Закрыть расходы</div>
+        <div style={{ color: 'var(--hint)', fontSize: 13, marginBottom: 12 }}>
+          Остаток по всем расходам: <b style={{ color: 'var(--text)' }}>{fmt(totalRemaining)}</b>
+        </div>
+        {totalNew > 0 && (
+          <div style={{
+            background: totalNew > totalRemaining ? '#fff0f0' : 'var(--bg2)',
+            borderRadius: 10, padding: '8px 12px', marginBottom: 10,
+            fontSize: 13, fontWeight: 600,
+            color: totalNew > totalRemaining ? '#ff3b30' : 'var(--text)',
+          }}>
+            К списанию: {fmt(totalNew)}
+            {totalNew > totalRemaining && ' ⚠️ превышает остаток'}
+          </div>
+        )}
+        {ips.map(ip => (
+          <IpRow
+            key={ip.id}
+            ip={ip}
+            entry={entries[ip.id]}
+            onChange={val => setEntries(prev => ({ ...prev, [ip.id]: val }))}
+          />
+        ))}
+        <div style={{ display: 'flex', gap: 8, marginTop: 16 }}>
+          <button className="btn btn-secondary" onClick={onClose} style={{ flex: 1 }}>Отмена</button>
+          <button className="btn btn-primary" onClick={handleSubmit} disabled={loading} style={{ flex: 1 }}>
+            {loading ? 'Обработка...' : 'Закрыть расходы'}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // ── Главная страница ──────────────────────────────────────────────────────────
 
 export default function Expenses({ user }) {
@@ -271,6 +355,7 @@ export default function Expenses({ user }) {
 
   // Модалки
   const [showAdd, setShowAdd] = useState(false)
+  const [showCloseAll, setShowCloseAll] = useState(false)
   const [writeOffTarget, setWriteOffTarget] = useState(null)
   const [editingWriteOff, setEditingWriteOff] = useState(null)       // { tx_id, ip_name, amount, source, expense_id }
   const [cancellingWriteOff, setCancellingWriteOff] = useState(null) // { tx_id, ip_name, amount, expense_id }
@@ -278,16 +363,6 @@ export default function Expenses({ user }) {
 
   const isAdmin = user?.role === 'admin'
   const canCreate = user?.role === 'user' || user?.role === 'admin'
-
-  const handleCloseExpense = async (exp) => {
-    try {
-      await client.patch('/expenses/' + exp.id + '/close')
-      setExpenses(prev => prev.map(e => e.id === exp.id ? { ...e, is_closed: true } : e))
-      setToast('✅ Расход закрыт')
-    } catch (e) {
-      setToast('Ошибка: ' + (e.response?.data?.detail || 'неизвестная'))
-    }
-  }
 
   const loadData = () => {
     setLoading(true)
@@ -358,6 +433,26 @@ export default function Expenses({ user }) {
         />
       )}
 
+      {/* Закрыть все расходы */}
+      {showCloseAll && (() => {
+        const openExpenses = [...expenses]
+          .filter(e => !e.is_closed)
+          .sort((a, b) => new Date(a.created_at) - new Date(b.created_at))
+        const totalRemaining = openExpenses.reduce((s, e) => {
+          const wo = e.writeoffs.reduce((ws, w) => ws + w.amount, 0)
+          return s + Math.max(0, e.amount - wo)
+        }, 0)
+        return (
+          <CloseAllModal
+            openExpenses={openExpenses}
+            ips={ips}
+            totalRemaining={totalRemaining}
+            onClose={() => setShowCloseAll(false)}
+            onDone={() => { setShowCloseAll(false); setToast('✅ Расходы закрыты'); loadData() }}
+          />
+        )
+      })()}
+
       {/* Удалить расход целиком */}
       {deletingExpense && (
         <ConfirmModal
@@ -381,6 +476,7 @@ export default function Expenses({ user }) {
         const totalAmount    = expenses.reduce((s, e) => s + e.amount, 0)
         const totalWrittenOff = expenses.reduce((s, e) => s + e.writeoffs.reduce((ws, w) => ws + w.amount, 0), 0)
         const totalRemaining = totalAmount - totalWrittenOff
+        const hasOpen = expenses.some(e => !e.is_closed && (e.amount - e.writeoffs.reduce((s, w) => s + w.amount, 0)) > 0)
         return (
           <div className="card" style={{ marginBottom: 12, padding: '12px 16px' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', textAlign: 'center' }}>
@@ -397,6 +493,15 @@ export default function Expenses({ user }) {
                 <div style={{ fontWeight: 700, fontSize: 15, marginTop: 2, color: totalRemaining > 0 ? '#ff9500' : '#34c759' }}>{fmt(totalRemaining)}</div>
               </div>
             </div>
+            {canCreate && hasOpen && (
+              <button
+                className="btn btn-primary"
+                style={{ marginTop: 10, padding: '8px 0', fontSize: 14 }}
+                onClick={() => setShowCloseAll(true)}
+              >
+                ✅ Закрыть расходы
+              </button>
+            )}
           </div>
         )
       })()}
@@ -473,27 +578,14 @@ export default function Expenses({ user }) {
               )}
 
               {/* Кнопки действий */}
-              {canCreate && !exp.is_closed && (
-                <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
-                  {remaining !== 0 && (
-                    <button
-                      className="btn btn-secondary"
-                      style={{ flex: 1, padding: '6px 0' }}
-                      onClick={() => setWriteOffTarget(exp)}
-                    >
-                      Списать на ИП
-                    </button>
-                  )}
-                  {remaining > 0 && (
-                    <button
-                      className="btn btn-secondary"
-                      style={{ flex: 1, padding: '6px 0' }}
-                      onClick={() => handleCloseExpense(exp)}
-                    >
-                      ✅ Закрыть
-                    </button>
-                  )}
-                </div>
+              {canCreate && !exp.is_closed && remaining !== 0 && (
+                <button
+                  className="btn btn-secondary"
+                  style={{ marginTop: 10, padding: '6px 0' }}
+                  onClick={() => setWriteOffTarget(exp)}
+                >
+                  Списать на ИП
+                </button>
               )}
               {exp.is_closed && (
                 <div style={{ marginTop: 8, fontSize: 12, color: '#34c759', fontWeight: 600 }}>✅ Закрыт</div>
