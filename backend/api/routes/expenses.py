@@ -1,16 +1,16 @@
 """
 Эндпоинты управления расходами.
-Создание расходов и их списание на счета ИП.
+Создание расходов, списание на счета ИП, удаление.
 """
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from backend.api.deps import get_current_user, get_regular_user, get_session
+from backend.api.deps import get_admin_user, get_current_user, get_regular_user, get_session
 from backend.database import crud
 from backend.database.models import User
-from backend.services.transaction import InsufficientFundsError, write_off_expense
+from backend.services.transaction import InsufficientFundsError, cancel_operation, write_off_expense
 
 router = APIRouter()
 
@@ -43,6 +43,8 @@ async def list_expenses(
             "created_at": exp.created_at.isoformat(),
             "writeoffs": [
                 {
+                    "tx_id": w.id,
+                    "ip_id": w.ip_id,
                     "ip_name": w.ip.name if w.ip else None,
                     "amount": w.amount,
                     "source": w.destination or "cash",
@@ -90,3 +92,27 @@ async def write_off(
     except ValueError as e:
         raise HTTPException(status_code=422, detail=str(e))
     return {"success": True, "transaction_id": tx.id}
+
+
+@router.delete("/expenses/{expense_id}")
+async def delete_expense(
+    expense_id: int,
+    admin: User = Depends(get_admin_user),
+    session: AsyncSession = Depends(get_session),
+) -> dict:
+    """Отменяет все списания расхода (возврат балансов) и удаляет сам расход."""
+    expense = await crud.get_expense(session, expense_id)
+    if expense is None:
+        raise HTTPException(status_code=404, detail="Расход не найден")
+
+    # Отменяем все активные списания — балансы ИП восстанавливаются
+    writeoffs = await crud.get_writeoffs_for_expense(session, expense_id)
+    for tx in writeoffs:
+        try:
+            await cancel_operation(session, tx.id, admin.id)
+        except ValueError:
+            pass  # уже отменена
+
+    # Удаляем запись расхода
+    await crud.delete_expense(session, expense_id)
+    return {"success": True}

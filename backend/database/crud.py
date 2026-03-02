@@ -190,6 +190,13 @@ async def get_writeoffs_for_expense(session, expense_id: int) -> list[Transactio
     return list(result.scalars().all())
 
 
+async def delete_expense(session, expense_id: int) -> None:
+    expense = await get_expense(session, expense_id)
+    if expense is None:
+        raise ValueError(f"Расход {expense_id} не найден")
+    await session.delete(expense)
+
+
 async def reset_all_data(session: AsyncSession) -> None:
     """Удаляет все ИП, транзакции, долги, расходы. Пользователи остаются."""
     await session.execute(delete(IpDebt))
