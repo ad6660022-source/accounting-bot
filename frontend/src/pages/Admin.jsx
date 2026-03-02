@@ -178,12 +178,18 @@ export default function Admin({ currentUser }) {
 
   useEffect(loadData, [])
 
-  const toggleRole = async (user) => {
-    const newRole = user.role === 'admin' ? 'user' : 'admin'
+  const ROLES = ['junior', 'user', 'admin']
+  const ROLE_LABELS = { junior: 'Младший', user: 'Юзер', admin: 'Админ' }
+
+  const changeRole = async (u, direction) => {
+    const idx = ROLES.indexOf(u.role)
+    const newIdx = idx + direction
+    if (newIdx < 0 || newIdx >= ROLES.length) return
+    const newRole = ROLES[newIdx]
     try {
-      await client.patch('/admin/users/' + user.id + '/role', { role: newRole })
-      setUsers(prev => prev.map(u => u.id === user.id ? { ...u, role: newRole } : u))
-      setToast('Роль ' + user.display_name + ' изменена')
+      await client.patch('/admin/users/' + u.id + '/role', { role: newRole })
+      setUsers(prev => prev.map(p => p.id === u.id ? { ...p, role: newRole } : p))
+      setToast('Роль ' + u.display_name + ': ' + ROLE_LABELS[newRole])
     } catch (e) {
       setToast('Ошибка: ' + (e.response?.data?.detail || 'неизвестная'))
     }
@@ -248,12 +254,21 @@ export default function Admin({ currentUser }) {
               </div>
               <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 6 }}>
                 <span className={'user-role ' + u.role}>
-                  {u.role === 'admin' ? 'Админ' : 'Юзер'}
+                  {ROLE_LABELS[u.role] || u.role}
                 </span>
                 {u.id !== currentUser?.id && (
-                  <button className="btn btn-secondary btn-sm" style={{ width: 'auto', padding: '4px 10px' }} onClick={() => toggleRole(u)}>
-                    Сменить
-                  </button>
+                  <div style={{ display: 'flex', gap: 4 }}>
+                    {ROLES.indexOf(u.role) < ROLES.length - 1 && (
+                      <button className="btn btn-secondary btn-sm" style={{ width: 'auto', padding: '4px 8px' }} onClick={() => changeRole(u, +1)}>
+                        ↑
+                      </button>
+                    )}
+                    {ROLES.indexOf(u.role) > 0 && (
+                      <button className="btn btn-secondary btn-sm" style={{ width: 'auto', padding: '4px 8px' }} onClick={() => changeRole(u, -1)}>
+                        ↓
+                      </button>
+                    )}
+                  </div>
                 )}
               </div>
             </div>

@@ -41,6 +41,18 @@ async def get_current_user(
     return db_user
 
 
+async def get_regular_user(
+    current_user: User = Depends(get_current_user),
+) -> User:
+    """Dependency: проверяет что пользователь имеет права user или admin (не junior)."""
+    if current_user.role not in ("user", "admin"):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Недостаточно прав для выполнения операций",
+        )
+    return current_user
+
+
 async def get_admin_user(
     current_user: User = Depends(get_current_user),
 ) -> User:

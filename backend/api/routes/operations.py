@@ -2,7 +2,7 @@ from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, field_validator
 from sqlalchemy.ext.asyncio import AsyncSession
-from backend.api.deps import get_current_user, get_session
+from backend.api.deps import get_current_user, get_regular_user, get_session
 from backend.database import crud
 from backend.database.models import TX_LABELS, User
 from backend.services.transaction import InsufficientFundsError, process_operation
@@ -29,7 +29,7 @@ class OperationRequest(BaseModel):
 @router.post("/operations")
 async def create_operation(
     body: OperationRequest,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_regular_user),
     session: AsyncSession = Depends(get_session),
 ) -> dict:
     try:

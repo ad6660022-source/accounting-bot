@@ -48,7 +48,7 @@ function RepayModal({ debt, onClose, onRepaid }) {
   )
 }
 
-export default function Debts() {
+export default function Debts({ user }) {
   const [debts, setDebts] = useState([])
   const [loading, setLoading] = useState(true)
   const [repaying, setRepaying] = useState(null)
@@ -89,9 +89,11 @@ export default function Debts() {
             <div className="debt-name">{d.debtor_ip_name} → {d.creditor_ip_name}</div>
             <div className="debt-amount">{fmt(d.amount)}</div>
           </div>
-          <button className="btn btn-primary btn-sm" style={{ width: "auto", minWidth: 90 }} onClick={() => setRepaying(d)}>
-            Погасить
-          </button>
+          {user?.role !== 'junior' && (
+            <button className="btn btn-primary btn-sm" style={{ width: "auto", minWidth: 90 }} onClick={() => setRepaying(d)}>
+              Погасить
+            </button>
+          )}
         </div>
       ))}
     </div>

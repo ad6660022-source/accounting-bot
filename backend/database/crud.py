@@ -19,7 +19,7 @@ async def get_all_users(session):
 async def get_or_create_user(session, user_id, username, admin_ids=None):
     user = await get_user(session, user_id)
     if user is None:
-        role = "admin" if (admin_ids and user_id in admin_ids) else "user"
+        role = "admin" if (admin_ids and user_id in admin_ids) else "junior"
         user = User(id=user_id, username=username, role=role)
         session.add(user)
         await session.flush()
@@ -90,8 +90,8 @@ async def update_ip_cash(session, ip_id, delta):
     ip.cash_balance += delta
     return ip
 
-async def create_transaction(session, user_id, tx_type, amount, ip_id=None, comment=None):
-    tx = Transaction(user_id=user_id, ip_id=ip_id, type=tx_type, amount=amount, comment=comment)
+async def create_transaction(session, user_id, tx_type, amount, ip_id=None, comment=None, destination=None):
+    tx = Transaction(user_id=user_id, ip_id=ip_id, type=tx_type, amount=amount, comment=comment, destination=destination)
     session.add(tx)
     await session.flush()
     return tx

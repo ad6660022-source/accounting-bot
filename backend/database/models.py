@@ -74,7 +74,7 @@ class User(Base):
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True)  # Telegram ID
     username: Mapped[str | None] = mapped_column(String(255), nullable=True)
-    role: Mapped[str] = mapped_column(String(20), default="user")  # admin / user
+    role: Mapped[str] = mapped_column(String(20), default="junior")  # admin / user / junior
     cash_balance: Mapped[int] = mapped_column(Integer, default=0)  # личные наличные (для долгов)
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
 
@@ -114,6 +114,7 @@ class Transaction(Base):
     type: Mapped[str] = mapped_column(String(30))
     amount: Mapped[int] = mapped_column(Integer)
     comment: Mapped[str | None] = mapped_column(Text, nullable=True)
+    destination: Mapped[str | None] = mapped_column(String(20), nullable=True)  # cash / bank / debit (для приходов)
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
 
     user: Mapped["User"] = relationship(back_populates="transactions")

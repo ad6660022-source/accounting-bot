@@ -38,6 +38,10 @@ async def init_db() -> None:
         await conn.execute(text(
             "ALTER TABLE ips ADD COLUMN IF NOT EXISTS debit_balance INTEGER NOT NULL DEFAULT 0"
         ))
+        # Миграция: добавляем destination для транзакций (cash/bank/debit для приходов)
+        await conn.execute(text(
+            "ALTER TABLE transactions ADD COLUMN IF NOT EXISTS destination VARCHAR(20)"
+        ))
         # Создаём все новые таблицы (существующие не трогает)
         await conn.run_sync(Base.metadata.create_all)
     logger.info("База данных инициализирована")

@@ -27,7 +27,7 @@ function fmt(n) {
   return new Intl.NumberFormat("ru-RU").format(n) + " ₽"
 }
 
-export default function AddOperation({ setPage }) {
+export default function AddOperation({ user }) {
   const [ips, setIps] = useState([])
   const [loading, setLoading] = useState(true)
   const [submitting, setSubmitting] = useState(false)
@@ -79,6 +79,19 @@ export default function AddOperation({ setPage }) {
   }
 
   if (loading) return <div className="page-content"><Loader /></div>
+
+  if (user?.role === 'junior') {
+    return (
+      <div className="page-content">
+        <div className="page-header">➕ Операция</div>
+        <div className="card text-center">
+          <div style={{ fontSize: 40, marginBottom: 12 }}>🔒</div>
+          <div style={{ fontWeight: 700, marginBottom: 8 }}>Нет доступа</div>
+          <div className="hint">Вы можете просматривать данные, но не можете проводить операции. Обратитесь к администратору для повышения прав.</div>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="page-content">

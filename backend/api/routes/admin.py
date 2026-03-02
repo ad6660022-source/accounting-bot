@@ -25,9 +25,9 @@ class RoleRequest(BaseModel):
 
 @router.patch("/users/{user_id}/role")
 async def set_role(user_id: int, body: RoleRequest, admin: User = Depends(get_admin_user), session: AsyncSession = Depends(get_session)) -> dict:
-    if body.role not in ("admin", "user"):
-        raise HTTPException(status_code=422, detail="Роль должна быть admin или user")
-    if user_id == admin.id and body.role == "user":
+    if body.role not in ("admin", "user", "junior"):
+        raise HTTPException(status_code=422, detail="Роль должна быть admin, user или junior")
+    if user_id == admin.id and body.role != "admin":
         raise HTTPException(status_code=400, detail="Нельзя снять права с самого себя")
     user = await crud.set_user_role(session, user_id, body.role)
     return {"id": user.id, "role": user.role}

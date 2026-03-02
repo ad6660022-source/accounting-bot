@@ -37,9 +37,9 @@ export default function App() {
   const renderPage = () => {
     switch (page) {
       case 'dashboard': return <Dashboard user={user} setPage={setPage} />
-      case 'operation': return <AddOperation setPage={setPage} />
-      case 'history':   return <History />
-      case 'debts':     return <Debts />
+      case 'operation': return <AddOperation user={user} />
+      case 'history':   return <History user={user} />
+      case 'debts':     return <Debts user={user} />
       case 'report':    return <Report />
       case 'admin':     return <Admin currentUser={user} />
       default:          return <Dashboard user={user} setPage={setPage} />
@@ -49,7 +49,7 @@ export default function App() {
   return (
     <div className="page">
       {renderPage()}
-      <BottomNav page={page} setPage={setPage} isAdmin={user?.role === 'admin'} />
+      <BottomNav page={page} setPage={setPage} userRole={user?.role} />
     </div>
   )
 }
