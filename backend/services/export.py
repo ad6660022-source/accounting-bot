@@ -46,7 +46,7 @@ def _get_delta(tx) -> tuple[int, int, int]:
         else:
             return (a, 0, 0)
     elif t == TxType.SNYAT_RS:
-        return (a, -a, 0)
+        return (0, -a, a)  # bank → debit
     elif t == TxType.SNYAT_DEBIT:
         return (a, 0, -a)
     elif t == TxType.VNESTI_RS:

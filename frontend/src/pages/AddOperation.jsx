@@ -40,11 +40,13 @@ export default function AddOperation({ user }) {
   const [comment, setComment] = useState("")
   const [destination, setDestination] = useState("cash")
 
-  useEffect(() => {
+  const loadIps = () => {
     client.get("/balance")
       .then(r => setIps(r.data.ips || []))
       .finally(() => setLoading(false))
-  }, [])
+  }
+
+  useEffect(loadIps, [])
 
   const op = OPERATIONS.find(o => o.type === selectedOp)
 
@@ -70,6 +72,7 @@ export default function AddOperation({ user }) {
       tg?.HapticFeedback?.notificationOccurred("success")
       setToast("✅ Операция проведена!")
       setSelectedOp(null); setSelectedIp(""); setSelectedTargetIp(""); setAmount(""); setComment(""); setDestination("cash")
+      loadIps()  // обновляем балансы ИП после операции
     } catch (e) {
       tg?.HapticFeedback?.notificationOccurred("error")
       setToast("❌ " + (e.response?.data?.detail || "Ошибка"))
