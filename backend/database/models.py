@@ -136,6 +136,7 @@ class Expense(Base):
     description: Mapped[str] = mapped_column(Text)
     amount: Mapped[int] = mapped_column(Integer)  # заявленная сумма (информационно)
     user_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("users.id"))
+    is_closed: Mapped[bool] = mapped_column(Boolean, default=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
 
     user: Mapped["User"] = relationship()

@@ -40,6 +40,7 @@ async def list_expenses(
             "id": exp.id,
             "description": exp.description,
             "amount": exp.amount,
+            "is_closed": exp.is_closed,
             "created_at": exp.created_at.isoformat(),
             "writeoffs": [
                 {
@@ -115,4 +116,18 @@ async def delete_expense(
 
     # Удаляем запись расхода
     await crud.delete_expense(session, expense_id)
+    return {"success": True}
+
+
+@router.patch("/expenses/{expense_id}/close")
+async def close_expense(
+    expense_id: int,
+    current_user: User = Depends(get_regular_user),
+    session: AsyncSession = Depends(get_session),
+) -> dict:
+    """Помечает расход как закрытый (без отмены списаний)."""
+    expense = await crud.get_expense(session, expense_id)
+    if expense is None:
+        raise HTTPException(status_code=404, detail="Расход не найден")
+    expense.is_closed = True
     return {"success": True}

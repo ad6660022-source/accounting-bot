@@ -1,5 +1,5 @@
 import logging
-from datetime import datetime, timezone
+from datetime import datetime
 from sqlalchemy.ext.asyncio import AsyncSession
 from backend.database import crud
 from backend.database.models import Transaction, TxType
@@ -186,7 +186,7 @@ async def cancel_operation(session, tx_id: int, admin_id: int) -> Transaction:
                 debt.is_paid = True
 
     tx.is_cancelled = True
-    tx.cancelled_at = datetime.now(timezone.utc)
+    tx.cancelled_at = datetime.utcnow()
     tx.cancelled_by_id = admin_id
     logger.info("Операция #%d отменена администратором %d", tx_id, admin_id)
     return tx

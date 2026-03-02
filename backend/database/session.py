@@ -56,6 +56,10 @@ async def init_db() -> None:
         await conn.execute(text(
             "ALTER TABLE transactions ADD COLUMN IF NOT EXISTS cancelled_by_id BIGINT"
         ))
+        # Миграция: статус закрытия расхода
+        await conn.execute(text(
+            "ALTER TABLE expenses ADD COLUMN IF NOT EXISTS is_closed BOOLEAN NOT NULL DEFAULT FALSE"
+        ))
         # Создаём все новые таблицы (существующие не трогает)
         await conn.run_sync(Base.metadata.create_all)
     logger.info("База данных инициализирована")

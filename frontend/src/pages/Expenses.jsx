@@ -279,6 +279,16 @@ export default function Expenses({ user }) {
   const isAdmin = user?.role === 'admin'
   const canCreate = user?.role === 'user' || user?.role === 'admin'
 
+  const handleCloseExpense = async (exp) => {
+    try {
+      await client.patch('/expenses/' + exp.id + '/close')
+      setExpenses(prev => prev.map(e => e.id === exp.id ? { ...e, is_closed: true } : e))
+      setToast('✅ Расход закрыт')
+    } catch (e) {
+      setToast('Ошибка: ' + (e.response?.data?.detail || 'неизвестная'))
+    }
+  }
+
   const loadData = () => {
     setLoading(true)
     Promise.all([
@@ -367,6 +377,30 @@ export default function Expenses({ user }) {
 
       <div className="page-header">💰 Расходы</div>
 
+      {expenses.length > 0 && (() => {
+        const totalAmount    = expenses.reduce((s, e) => s + e.amount, 0)
+        const totalWrittenOff = expenses.reduce((s, e) => s + e.writeoffs.reduce((ws, w) => ws + w.amount, 0), 0)
+        const totalRemaining = totalAmount - totalWrittenOff
+        return (
+          <div className="card" style={{ marginBottom: 12, padding: '12px 16px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', textAlign: 'center' }}>
+              <div style={{ flex: 1 }}>
+                <div style={{ fontSize: 11, color: 'var(--hint)', textTransform: 'uppercase', letterSpacing: '.4px' }}>Всего</div>
+                <div style={{ fontWeight: 700, fontSize: 15, marginTop: 2 }}>{fmt(totalAmount)}</div>
+              </div>
+              <div style={{ flex: 1, borderLeft: '1px solid var(--bg)', borderRight: '1px solid var(--bg)' }}>
+                <div style={{ fontSize: 11, color: 'var(--hint)', textTransform: 'uppercase', letterSpacing: '.4px' }}>Списано</div>
+                <div style={{ fontWeight: 700, fontSize: 15, marginTop: 2, color: '#ff3b30' }}>{fmt(totalWrittenOff)}</div>
+              </div>
+              <div style={{ flex: 1 }}>
+                <div style={{ fontSize: 11, color: 'var(--hint)', textTransform: 'uppercase', letterSpacing: '.4px' }}>Остаток</div>
+                <div style={{ fontWeight: 700, fontSize: 15, marginTop: 2, color: totalRemaining > 0 ? '#ff9500' : '#34c759' }}>{fmt(totalRemaining)}</div>
+              </div>
+            </div>
+          </div>
+        )
+      })()}
+
       {canCreate && (
         <button className="btn btn-primary" style={{ marginBottom: 12 }} onClick={() => setShowAdd(true)}>
           + Добавить расход
@@ -438,15 +472,31 @@ export default function Expenses({ user }) {
                 </div>
               )}
 
-              {/* Кнопка "Списать" */}
-              {canCreate && remaining !== 0 && (
-                <button
-                  className="btn btn-secondary"
-                  style={{ marginTop: 10, padding: '6px 0' }}
-                  onClick={() => setWriteOffTarget(exp)}
-                >
-                  Списать на ИП
-                </button>
+              {/* Кнопки действий */}
+              {canCreate && !exp.is_closed && (
+                <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
+                  {remaining !== 0 && (
+                    <button
+                      className="btn btn-secondary"
+                      style={{ flex: 1, padding: '6px 0' }}
+                      onClick={() => setWriteOffTarget(exp)}
+                    >
+                      Списать на ИП
+                    </button>
+                  )}
+                  {remaining > 0 && (
+                    <button
+                      className="btn btn-secondary"
+                      style={{ flex: 1, padding: '6px 0' }}
+                      onClick={() => handleCloseExpense(exp)}
+                    >
+                      ✅ Закрыть
+                    </button>
+                  )}
+                </div>
+              )}
+              {exp.is_closed && (
+                <div style={{ marginTop: 8, fontSize: 12, color: '#34c759', fontWeight: 600 }}>✅ Закрыт</div>
               )}
             </div>
           )
