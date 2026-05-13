@@ -11,7 +11,7 @@ class InsufficientFundsError(ValueError):
     pass
 
 
-async def process_operation(session, user_id, op_type, amount, ip_id=None, target_ip_id=None, comment=None, destination=None):
+async def process_operation(session, user_id, op_type, amount, ip_id=None, target_ip_id=None, comment=None, destination=None, workspace_id=None):
     user = await crud.get_user(session, user_id)
     if user is None:
         raise ValueError(f"Пользователь {user_id} не найден")
@@ -97,7 +97,10 @@ async def process_operation(session, user_id, op_type, amount, ip_id=None, targe
     else:
         raise ValueError(f"Неизвестный тип операции: {op_type}")
 
-    tx = await crud.create_transaction(session, user_id=user_id, tx_type=op_type, amount=amount, ip_id=ip_id, comment=comment, destination=destination)
+    tx = await crud.create_transaction(
+        session, user_id=user_id, tx_type=op_type, amount=amount,
+        ip_id=ip_id, comment=comment, destination=destination, workspace_id=workspace_id,
+    )
     logger.info("Операция [%s] user=%d amount=%d ip=%s", op_type, user_id, amount, ip_id)
     return tx
 

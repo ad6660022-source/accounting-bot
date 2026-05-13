@@ -1,13 +1,8 @@
-"""
-Эндпоинты управления расходами.
-Создание расходов, списание на счета ИП, удаление.
-"""
-
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from backend.api.deps import get_admin_user, get_current_user, get_regular_user, get_session
+from backend.api.deps import get_admin_user, get_current_user, get_regular_user, get_session, get_workspace_id
 from backend.database import crud
 from backend.database.models import User
 from backend.services.transaction import InsufficientFundsError, cancel_operation, write_off_expense
@@ -23,16 +18,16 @@ class CreateExpenseRequest(BaseModel):
 class WriteOffRequest(BaseModel):
     ip_id: int
     amount: int
-    source: str  # cash / bank / debit
+    source: str
 
 
 @router.get("/expenses")
 async def list_expenses(
     limit: int = 100,
-    _user: User = Depends(get_current_user),
+    workspace_id: int = Depends(get_workspace_id),
     session: AsyncSession = Depends(get_session),
 ) -> list:
-    expenses = await crud.get_expenses(session, limit=limit)
+    expenses = await crud.get_expenses(session, limit=limit, workspace_id=workspace_id)
     result = []
     for exp in expenses:
         writeoffs = await crud.get_writeoffs_for_expense(session, exp.id)
@@ -60,13 +55,17 @@ async def list_expenses(
 async def create_expense(
     body: CreateExpenseRequest,
     current_user: User = Depends(get_regular_user),
+    workspace_id: int = Depends(get_workspace_id),
     session: AsyncSession = Depends(get_session),
 ) -> dict:
     if not body.description.strip():
         raise HTTPException(status_code=422, detail="Введите описание расхода")
     if body.amount <= 0:
         raise HTTPException(status_code=422, detail="Сумма должна быть больше нуля")
-    expense = await crud.create_expense(session, current_user.id, body.description.strip(), body.amount)
+    expense = await crud.create_expense(
+        session, current_user.id, body.description.strip(), body.amount,
+        workspace_id=workspace_id,
+    )
     return {"id": expense.id, "description": expense.description, "amount": expense.amount}
 
 
@@ -101,20 +100,15 @@ async def delete_expense(
     admin: User = Depends(get_admin_user),
     session: AsyncSession = Depends(get_session),
 ) -> dict:
-    """Отменяет все списания расхода (возврат балансов) и удаляет сам расход."""
     expense = await crud.get_expense(session, expense_id)
     if expense is None:
         raise HTTPException(status_code=404, detail="Расход не найден")
-
-    # Отменяем все активные списания — балансы ИП восстанавливаются
     writeoffs = await crud.get_writeoffs_for_expense(session, expense_id)
     for tx in writeoffs:
         try:
             await cancel_operation(session, tx.id, admin.id)
         except ValueError:
-            pass  # уже отменена
-
-    # Удаляем запись расхода
+            pass
     await crud.delete_expense(session, expense_id)
     return {"success": True}
 
@@ -125,7 +119,6 @@ async def close_expense(
     current_user: User = Depends(get_regular_user),
     session: AsyncSession = Depends(get_session),
 ) -> dict:
-    """Помечает расход как закрытый (без отмены списаний)."""
     expense = await crud.get_expense(session, expense_id)
     if expense is None:
         raise HTTPException(status_code=404, detail="Расход не найден")

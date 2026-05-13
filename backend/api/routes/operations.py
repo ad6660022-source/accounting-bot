@@ -2,7 +2,7 @@ from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, field_validator
 from sqlalchemy.ext.asyncio import AsyncSession
-from backend.api.deps import get_admin_user, get_current_user, get_regular_user, get_session
+from backend.api.deps import get_admin_user, get_current_user, get_regular_user, get_session, get_workspace_id
 from backend.database import crud
 from backend.database.models import TX_LABELS, User
 from backend.services.transaction import InsufficientFundsError, cancel_operation, edit_operation, process_operation
@@ -16,7 +16,7 @@ class OperationRequest(BaseModel):
     ip_id: Optional[int] = None
     target_ip_id: Optional[int] = None
     comment: Optional[str] = None
-    destination: Optional[str] = None  # cash / bank / debit (для приходов)
+    destination: Optional[str] = None
 
     @field_validator("amount")
     @classmethod
@@ -35,6 +35,7 @@ class EditOperationRequest(BaseModel):
 async def create_operation(
     body: OperationRequest,
     current_user: User = Depends(get_regular_user),
+    workspace_id: int = Depends(get_workspace_id),
     session: AsyncSession = Depends(get_session),
 ) -> dict:
     try:
@@ -47,6 +48,7 @@ async def create_operation(
             target_ip_id=body.target_ip_id,
             comment=body.comment,
             destination=body.destination,
+            workspace_id=workspace_id,
         )
     except InsufficientFundsError as e:
         raise HTTPException(status_code=400, detail=str(e))
@@ -95,10 +97,13 @@ async def get_transactions(
     limit: int = 100,
     ip_id: Optional[int] = None,
     include_cancelled: bool = False,
-    _current_user: User = Depends(get_current_user),
+    workspace_id: int = Depends(get_workspace_id),
     session: AsyncSession = Depends(get_session),
 ) -> list:
-    txs = await crud.get_transactions(session, ip_id=ip_id, limit=limit, include_cancelled=include_cancelled)
+    txs = await crud.get_transactions(
+        session, ip_id=ip_id, limit=limit,
+        include_cancelled=include_cancelled, workspace_id=workspace_id,
+    )
     return [
         {
             "id": tx.id,

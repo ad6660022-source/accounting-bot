@@ -32,17 +32,17 @@ def _period_start(period: str) -> datetime | None:
 
 
 async def get_personal_report(
-    session: AsyncSession, user_id: int, period: str
+    session: AsyncSession, user_id: int, period: str, workspace_id: int | None = None
 ) -> str:
     since = _period_start(period)
     label = PERIOD_LABELS.get(period, period)
 
-    txs = await crud.get_transactions(session, user_id=user_id, since=since)
+    txs = await crud.get_transactions(session, user_id=user_id, since=since, workspace_id=workspace_id)
     income = sum(t.amount for t in txs if t.type in INCOME_TYPES)
     expense = sum(t.amount for t in txs if t.type in EXPENSE_TYPES)
 
-    ips = await crud.get_all_ips(session)
-    ip_debts = await crud.get_active_ip_debts(session)
+    ips = await crud.get_all_ips(session, workspace_id=workspace_id)
+    ip_debts = await crud.get_active_ip_debts(session, workspace_id=workspace_id)
 
     def fmt(n: int) -> str:
         return f"{n:,}".replace(",", "\u202f") + " \u20bd"

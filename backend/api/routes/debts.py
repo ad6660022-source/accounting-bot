@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
-from backend.api.deps import get_current_user, get_session
+from backend.api.deps import get_current_user, get_session, get_workspace_id
 from backend.database import crud
 from backend.database.models import User
 from backend.services.transaction import InsufficientFundsError, repay_ip_debt_operation
@@ -11,10 +11,10 @@ router = APIRouter()
 
 @router.get("/debts")
 async def get_ip_debts(
-    _current_user: User = Depends(get_current_user),
+    workspace_id: int = Depends(get_workspace_id),
     session: AsyncSession = Depends(get_session),
 ) -> list:
-    debts = await crud.get_active_ip_debts(session)
+    debts = await crud.get_active_ip_debts(session, workspace_id=workspace_id)
     return [
         {
             "id": d.id,

@@ -1,18 +1,17 @@
 from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
-from backend.api.deps import get_current_user, get_session
+from backend.api.deps import get_session, get_workspace_id
 from backend.database import crud
-from backend.database.models import User
 
 router = APIRouter()
 
 
 @router.get("/balance")
 async def get_balance(
-    current_user: User = Depends(get_current_user),
+    workspace_id: int = Depends(get_workspace_id),
     session: AsyncSession = Depends(get_session),
 ) -> dict:
-    ips = await crud.get_all_ips(session)
+    ips = await crud.get_all_ips(session, workspace_id=workspace_id)
     ip_list = [
         {
             "id": ip.id,

@@ -1,14 +1,9 @@
-"""
-Эндпоинт аналитики оборота по типам операций.
-Поддерживает фильтрацию по ИП и периоду.
-"""
-
 from typing import Optional
 
 from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from backend.api.deps import get_current_user, get_session
+from backend.api.deps import get_current_user, get_session, get_workspace_id
 from backend.database import crud
 from backend.database.models import TxType, User
 from backend.services.reports import _period_start
@@ -23,11 +18,13 @@ _EXPENSE_TYPES = {TxType.ZAKUP, TxType.STORONNIE, TxType.EXPENSE_WRITEOFF}
 async def get_analytics(
     period: str = "all",
     ip_id: Optional[int] = None,
-    _user: User = Depends(get_current_user),
+    workspace_id: int = Depends(get_workspace_id),
     session: AsyncSession = Depends(get_session),
 ) -> dict:
     since = _period_start(period)
-    txs = await crud.get_transactions(session, ip_id=ip_id, since=since, limit=10000)
+    txs = await crud.get_transactions(
+        session, ip_id=ip_id, since=since, limit=10000, workspace_id=workspace_id
+    )
 
     by_type: dict[str, int] = {}
     for tx in txs:

@@ -1,9 +1,9 @@
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
-from backend.api.deps import get_admin_user, get_session
+from backend.api.deps import get_admin_user, get_session, get_workspace_id
 from backend.database import crud
-from backend.database.models import User
+from backend.database.models import PLAN_LIMITS, User
 from backend.services.ip_manager import create_ip as svc_create_ip
 from backend.services.ip_manager import update_ip_balances as svc_update_ip_balances
 
@@ -11,10 +11,18 @@ router = APIRouter()
 
 
 @router.get("/users")
-async def list_users(_admin: User = Depends(get_admin_user), session: AsyncSession = Depends(get_session)) -> list:
-    users = await crud.get_all_users(session)
+async def list_users(
+    admin: User = Depends(get_admin_user),
+    workspace_id: int = Depends(get_workspace_id),
+    session: AsyncSession = Depends(get_session),
+) -> list:
+    users = await crud.get_all_users(session, workspace_id=workspace_id)
     return [
-        {"id": u.id, "username": u.username, "display_name": u.display_name, "role": u.role, "cash_balance": u.cash_balance, "created_at": u.created_at.isoformat()}
+        {
+            "id": u.id, "username": u.username, "display_name": u.display_name,
+            "role": u.role, "cash_balance": u.cash_balance,
+            "created_at": u.created_at.isoformat(),
+        }
         for u in users
     ]
 
@@ -24,7 +32,12 @@ class RoleRequest(BaseModel):
 
 
 @router.patch("/users/{user_id}/role")
-async def set_role(user_id: int, body: RoleRequest, admin: User = Depends(get_admin_user), session: AsyncSession = Depends(get_session)) -> dict:
+async def set_role(
+    user_id: int,
+    body: RoleRequest,
+    admin: User = Depends(get_admin_user),
+    session: AsyncSession = Depends(get_session),
+) -> dict:
     if body.role not in ("admin", "user", "junior"):
         raise HTTPException(status_code=422, detail="Роль должна быть admin, user или junior")
     if user_id == admin.id and body.role != "admin":
@@ -34,10 +47,18 @@ async def set_role(user_id: int, body: RoleRequest, admin: User = Depends(get_ad
 
 
 @router.get("/ips")
-async def list_ips(_admin: User = Depends(get_admin_user), session: AsyncSession = Depends(get_session)) -> list:
-    ips = await crud.get_all_ips(session)
+async def list_ips(
+    admin: User = Depends(get_admin_user),
+    workspace_id: int = Depends(get_workspace_id),
+    session: AsyncSession = Depends(get_session),
+) -> list:
+    ips = await crud.get_all_ips(session, workspace_id=workspace_id)
     return [
-        {"id": ip.id, "name": ip.name, "bank_balance": ip.bank_balance, "debit_balance": ip.debit_balance, "cash_balance": ip.cash_balance, "initial_capital": ip.initial_capital}
+        {
+            "id": ip.id, "name": ip.name, "bank_balance": ip.bank_balance,
+            "debit_balance": ip.debit_balance, "cash_balance": ip.cash_balance,
+            "initial_capital": ip.initial_capital,
+        }
         for ip in ips
     ]
 
@@ -49,12 +70,36 @@ class IpCreateRequest(BaseModel):
 
 
 @router.post("/ips")
-async def create_ip(body: IpCreateRequest, _admin: User = Depends(get_admin_user), session: AsyncSession = Depends(get_session)) -> dict:
+async def create_ip(
+    body: IpCreateRequest,
+    admin: User = Depends(get_admin_user),
+    workspace_id: int = Depends(get_workspace_id),
+    session: AsyncSession = Depends(get_session),
+) -> dict:
+    # Проверяем лимит тарифного плана
+    ws = await crud.get_workspace(session, workspace_id)
+    plan = ws.plan if ws else "free"
+    limit = PLAN_LIMITS.get(plan, PLAN_LIMITS["free"])["ips"]
+    current_count = await crud.count_ips(session, workspace_id)
+    if current_count >= limit:
+        plan_label = PLAN_LIMITS.get(plan, {}).get("label", plan)
+        raise HTTPException(
+            status_code=403,
+            detail=f"Лимит ИП для тарифа {plan_label}: {limit}. Обновите подписку.",
+        )
     try:
-        ip = await svc_create_ip(session, body.name.strip(), bank_balance=body.bank_balance, cash_balance=body.cash_balance)
+        ip = await svc_create_ip(
+            session, body.name.strip(),
+            bank_balance=body.bank_balance,
+            cash_balance=body.cash_balance,
+            workspace_id=workspace_id,
+        )
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
-    return {"id": ip.id, "name": ip.name, "bank_balance": ip.bank_balance, "debit_balance": ip.debit_balance, "cash_balance": ip.cash_balance}
+    return {
+        "id": ip.id, "name": ip.name, "bank_balance": ip.bank_balance,
+        "debit_balance": ip.debit_balance, "cash_balance": ip.cash_balance,
+    }
 
 
 class IpBalancesRequest(BaseModel):
@@ -63,15 +108,29 @@ class IpBalancesRequest(BaseModel):
 
 
 @router.patch("/ips/{ip_id}/balances")
-async def update_ip_balances(ip_id: int, body: IpBalancesRequest, _admin: User = Depends(get_admin_user), session: AsyncSession = Depends(get_session)) -> dict:
+async def update_ip_balances(
+    ip_id: int,
+    body: IpBalancesRequest,
+    admin: User = Depends(get_admin_user),
+    session: AsyncSession = Depends(get_session),
+) -> dict:
     try:
-        ip = await svc_update_ip_balances(session, ip_id, bank_balance=body.bank_balance, cash_balance=body.cash_balance)
+        ip = await svc_update_ip_balances(
+            session, ip_id, bank_balance=body.bank_balance, cash_balance=body.cash_balance
+        )
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
-    return {"id": ip.id, "name": ip.name, "bank_balance": ip.bank_balance, "debit_balance": ip.debit_balance, "cash_balance": ip.cash_balance}
+    return {
+        "id": ip.id, "name": ip.name, "bank_balance": ip.bank_balance,
+        "debit_balance": ip.debit_balance, "cash_balance": ip.cash_balance,
+    }
 
 
 @router.post("/reset")
-async def reset_all_data(_admin: User = Depends(get_admin_user), session: AsyncSession = Depends(get_session)) -> dict:
-    await crud.reset_all_data(session)
+async def reset_all_data(
+    admin: User = Depends(get_admin_user),
+    workspace_id: int = Depends(get_workspace_id),
+    session: AsyncSession = Depends(get_session),
+) -> dict:
+    await crud.reset_all_data(session, workspace_id=workspace_id)
     return {"success": True}

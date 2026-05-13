@@ -29,8 +29,11 @@ logger = logging.getLogger(__name__)
 async def setup_bot_commands(bot: Bot) -> None:
     """Регистрирует команды бота в Telegram (видны в меню команд)."""
     commands = [
-        BotCommand(command="start", description="Открыть бухгалтерию"),
-        BotCommand(command="help",  description="Справка"),
+        BotCommand(command="start",     description="Открыть бухгалтерию"),
+        BotCommand(command="plan",      description="Текущий тарифный план"),
+        BotCommand(command="subscribe", description="Улучшить тариф"),
+        BotCommand(command="invite",    description="Код приглашения для коллег"),
+        BotCommand(command="help",      description="Справка"),
     ]
     await bot.set_my_commands(commands, scope=BotCommandScopeDefault())
 

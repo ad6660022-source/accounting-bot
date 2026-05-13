@@ -1,12 +1,9 @@
-"""
-Эндпоинт отправки мини-сводки в Telegram.
-Отправляет текущее состояние балансов ИП и долгов пользователю в личку.
-"""
+"""Отправляет сводку балансов ИП пользователю в Telegram."""
 
 from fastapi import APIRouter, Depends, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from backend.api.deps import get_current_user, get_session
+from backend.api.deps import get_current_user, get_session, get_workspace_id
 from backend.database import crud
 from backend.database.models import User
 
@@ -14,7 +11,7 @@ router = APIRouter()
 
 
 def _fmt(n: int) -> str:
-    return f"{n:,}".replace(",", "\u202f") + "\u00a0\u20bd"
+    return f"{n:,}".replace(",", " ") + " ₽"
 
 
 def _build_summary_text(ips, debts) -> str:
@@ -43,10 +40,11 @@ def _build_summary_text(ips, debts) -> str:
 async def send_summary(
     request: Request,
     current_user: User = Depends(get_current_user),
+    workspace_id: int = Depends(get_workspace_id),
     session: AsyncSession = Depends(get_session),
 ) -> dict:
-    ips = await crud.get_all_ips(session)
-    debts = await crud.get_active_ip_debts(session)
+    ips = await crud.get_all_ips(session, workspace_id=workspace_id)
+    debts = await crud.get_active_ip_debts(session, workspace_id=workspace_id)
     text = _build_summary_text(ips, debts)
 
     bot = getattr(request.app.state, "bot", None)

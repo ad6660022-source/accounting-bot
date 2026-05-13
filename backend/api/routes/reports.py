@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from backend.api.deps import get_current_user, get_session
+from backend.api.deps import get_current_user, get_session, get_workspace_id
 from backend.database import crud
 from backend.database.models import EXPENSE_TYPES, INCOME_TYPES, User
 from backend.services.reports import _period_start
@@ -12,17 +12,17 @@ router = APIRouter()
 @router.get("/report/{period}")
 async def get_report(
     period: str,
-    _current_user: User = Depends(get_current_user),
+    workspace_id: int = Depends(get_workspace_id),
     session: AsyncSession = Depends(get_session),
 ) -> dict:
     since = _period_start(period)
-    txs = await crud.get_transactions(session, since=since)
+    txs = await crud.get_transactions(session, since=since, workspace_id=workspace_id)
 
     income = sum(t.amount for t in txs if t.type in INCOME_TYPES)
     expense = sum(t.amount for t in txs if t.type in EXPENSE_TYPES)
 
-    ips = await crud.get_all_ips(session)
-    ip_debts = await crud.get_active_ip_debts(session)
+    ips = await crud.get_all_ips(session, workspace_id=workspace_id)
+    ip_debts = await crud.get_active_ip_debts(session, workspace_id=workspace_id)
 
     return {
         "period": period,

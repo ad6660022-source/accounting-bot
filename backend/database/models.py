@@ -15,6 +15,7 @@ from sqlalchemy import (
     Integer,
     String,
     Text,
+    UniqueConstraint,
     func,
 )
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
@@ -23,20 +24,19 @@ from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 # ── Константы типов операций ──────────────────────────────────────────────────
 
 class TxType:
-    ZAKUP            = "zakup"            # Закуп (нал ИП → -)
-    STORONNIE        = "storonnie"        # Посторонние траты (нал ИП → -)
-    PRIHOD_MES       = "prihod_mes"       # Приход ежемесячный (+ нал ИП)
-    PRIHOD_FAST      = "prihod_fast"      # Приход быстрый (+ нал ИП)
-    PRIHOD_STO       = "prihod_sto"       # Приход сторонний (+ нал ИП)
-    SNYAT_RS         = "snyat_rs"         # Снять с Р/С → дебет ИП
-    SNYAT_DEBIT      = "snyat_debit"      # Снять с дебета → наличные ИП
-    VNESTI_RS        = "vnesti_rs"        # Внести на Р/С ← наличные ИП
-    ODOLZHIT         = "odolzhit"         # Одолжить (нал ИП → нал другого ИП)
-    POGASIT          = "pogasit"          # Погашение долга между ИП
-    EXPENSE_WRITEOFF = "expense_writeoff" # Расход (списание с ИП)
+    ZAKUP            = "zakup"
+    STORONNIE        = "storonnie"
+    PRIHOD_MES       = "prihod_mes"
+    PRIHOD_FAST      = "prihod_fast"
+    PRIHOD_STO       = "prihod_sto"
+    SNYAT_RS         = "snyat_rs"
+    SNYAT_DEBIT      = "snyat_debit"
+    VNESTI_RS        = "vnesti_rs"
+    ODOLZHIT         = "odolzhit"
+    POGASIT          = "pogasit"
+    EXPENSE_WRITEOFF = "expense_writeoff"
 
 
-# Группы типов для отчётов
 INCOME_TYPES: frozenset[str] = frozenset({
     TxType.PRIHOD_MES,
     TxType.PRIHOD_FAST,
@@ -47,7 +47,6 @@ EXPENSE_TYPES: frozenset[str] = frozenset({
     TxType.STORONNIE,
 })
 
-# Человекочитаемые названия операций
 TX_LABELS: dict[str, str] = {
     TxType.ZAKUP:            "🛒 Закуп",
     TxType.STORONNIE:        "💸 Посторонние траты",
@@ -62,6 +61,13 @@ TX_LABELS: dict[str, str] = {
     TxType.EXPENSE_WRITEOFF: "💰 Расход (списание)",
 }
 
+# Лимиты тарифных планов
+PLAN_LIMITS: dict[str, dict] = {
+    "free":     {"ips": 1,  "members": 2,   "label": "Free",     "stars": 0},
+    "pro":      {"ips": 5,  "members": 10,  "label": "Pro ⭐",   "stars": 199},
+    "business": {"ips": 99, "members": 999, "label": "Business 💎", "stars": 499},
+}
+
 
 # ── Базовый класс ─────────────────────────────────────────────────────────────
 
@@ -69,18 +75,55 @@ class Base(DeclarativeBase):
     pass
 
 
+# ── Рабочие пространства (воркспейсы) ─────────────────────────────────────────
+
+class Workspace(Base):
+    __tablename__ = "workspaces"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    name: Mapped[str] = mapped_column(String(100), nullable=False)
+    owner_id: Mapped[int] = mapped_column(BigInteger, nullable=False)  # Telegram ID владельца
+    plan: Mapped[str] = mapped_column(String(20), default="free")
+    sub_end: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    invite_code: Mapped[str] = mapped_column(String(20), unique=True, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+
+    members: Mapped[list["User"]] = relationship(back_populates="workspace", foreign_keys="User.workspace_id")
+    ips: Mapped[list["IP"]] = relationship(back_populates="workspace")
+
+    @property
+    def plan_label(self) -> str:
+        return PLAN_LIMITS.get(self.plan, {}).get("label", self.plan)
+
+    @property
+    def is_sub_active(self) -> bool:
+        from datetime import timezone
+        if self.plan == "free":
+            return True
+        if self.sub_end is None:
+            return False
+        now = datetime.now(timezone.utc)
+        end = self.sub_end
+        if end.tzinfo is None:
+            from datetime import timezone as tz
+            end = end.replace(tzinfo=tz.utc)
+        return end > now
+
+
 # ── Пользователи ──────────────────────────────────────────────────────────────
 
 class User(Base):
     __tablename__ = "users"
 
-    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)  # Telegram ID
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
     username: Mapped[str | None] = mapped_column(String(255), nullable=True)
-    role: Mapped[str] = mapped_column(String(20), default="junior")  # admin / user / junior
-    cash_balance: Mapped[int] = mapped_column(Integer, default=0)  # личные наличные (для долгов)
+    role: Mapped[str] = mapped_column(String(20), default="junior")
+    cash_balance: Mapped[int] = mapped_column(Integer, default=0)
+    workspace_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("workspaces.id"), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
 
     transactions: Mapped[list["Transaction"]] = relationship(back_populates="user")
+    workspace: Mapped["Workspace | None"] = relationship(back_populates="members", foreign_keys=[workspace_id])
 
     @property
     def display_name(self) -> str:
@@ -91,16 +134,19 @@ class User(Base):
 
 class IP(Base):
     __tablename__ = "ips"
+    __table_args__ = (UniqueConstraint("workspace_id", "name", name="uq_ip_workspace_name"),)
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    name: Mapped[str] = mapped_column(String(100), unique=True)
-    bank_balance: Mapped[int] = mapped_column(Integer, default=0)   # расчётный счёт
-    debit_balance: Mapped[int] = mapped_column(Integer, default=0)  # дебет (промежуточный)
-    cash_balance: Mapped[int] = mapped_column(Integer, default=0)   # наличные ИП
+    name: Mapped[str] = mapped_column(String(100))
+    workspace_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("workspaces.id"), nullable=True)
+    bank_balance: Mapped[int] = mapped_column(Integer, default=0)
+    debit_balance: Mapped[int] = mapped_column(Integer, default=0)
+    cash_balance: Mapped[int] = mapped_column(Integer, default=0)
     initial_capital: Mapped[int] = mapped_column(Integer, default=0)
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
 
     transactions: Mapped[list["Transaction"]] = relationship(back_populates="ip")
+    workspace: Mapped["Workspace | None"] = relationship(back_populates="ips")
 
 
 # ── Транзакции ────────────────────────────────────────────────────────────────
@@ -110,13 +156,12 @@ class Transaction(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     user_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("users.id"))
-    ip_id: Mapped[int | None] = mapped_column(
-        Integer, ForeignKey("ips.id"), nullable=True
-    )
+    ip_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("ips.id"), nullable=True)
+    workspace_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("workspaces.id"), nullable=True)
     type: Mapped[str] = mapped_column(String(30))
     amount: Mapped[int] = mapped_column(Integer)
     comment: Mapped[str | None] = mapped_column(Text, nullable=True)
-    destination: Mapped[str | None] = mapped_column(String(20), nullable=True)  # cash / bank / debit (для приходов)
+    destination: Mapped[str | None] = mapped_column(String(20), nullable=True)
     expense_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("expenses.id"), nullable=True)
     is_cancelled: Mapped[bool] = mapped_column(Boolean, default=False)
     cancelled_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
@@ -127,15 +172,16 @@ class Transaction(Base):
     ip: Mapped["IP | None"] = relationship(back_populates="transactions")
 
 
-# ── Расходы (журнал расходов) ─────────────────────────────────────────────────
+# ── Расходы ───────────────────────────────────────────────────────────────────
 
 class Expense(Base):
     __tablename__ = "expenses"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     description: Mapped[str] = mapped_column(Text)
-    amount: Mapped[int] = mapped_column(Integer)  # заявленная сумма (информационно)
+    amount: Mapped[int] = mapped_column(Integer)
     user_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("users.id"))
+    workspace_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("workspaces.id"), nullable=True)
     is_closed: Mapped[bool] = mapped_column(Boolean, default=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
 
@@ -150,6 +196,7 @@ class IpDebt(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     creditor_ip_id: Mapped[int] = mapped_column(Integer, ForeignKey("ips.id"))
     debtor_ip_id: Mapped[int] = mapped_column(Integer, ForeignKey("ips.id"))
+    workspace_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("workspaces.id"), nullable=True)
     amount: Mapped[int] = mapped_column(Integer)
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
     is_paid: Mapped[bool] = mapped_column(Boolean, default=False)
