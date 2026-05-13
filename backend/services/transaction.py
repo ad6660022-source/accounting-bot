@@ -92,7 +92,7 @@ async def process_operation(session, user_id, op_type, amount, ip_id=None, targe
             raise InsufficientFundsError(f"Недостаточно наличных у ИП.\nОстаток: {creditor_ip.cash_balance:,} ₽")
         await crud.update_ip_cash(session, ip_id, -amount)
         await crud.update_ip_cash(session, target_ip_id, +amount)
-        await crud.create_ip_debt(session, ip_id, target_ip_id, amount)
+        await crud.create_ip_debt(session, ip_id, target_ip_id, amount, workspace_id=workspace_id)
 
     else:
         raise ValueError(f"Неизвестный тип операции: {op_type}")
