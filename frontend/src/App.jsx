@@ -9,6 +9,7 @@ import Report from './pages/Report'
 import Admin from './pages/Admin'
 import Expenses from './pages/Expenses'
 import Analytics from './pages/Analytics'
+import ReportsAnalytics from './pages/ReportsAnalytics'
 import Help from './pages/Help'
 import Loader from './components/Loader'
 
@@ -46,6 +47,7 @@ export default function App() {
       case 'debts':      return <Debts user={user} />
       case 'report':     return <Report user={user} />
       case 'analytics':  return <Analytics user={user} />
+      case 'reports':    return <ReportsAnalytics user={user} />
       case 'help':       return <Help />
       case 'admin':      return <Admin currentUser={user} />
       default:           return <Dashboard user={user} setPage={setPage} />

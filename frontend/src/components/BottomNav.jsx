@@ -1,20 +1,17 @@
 export default function BottomNav({ page, setPage, userRole }) {
   const isJunior = userRole === 'junior'
-  const isAdmin = userRole === 'admin'
+  const isAdmin  = userRole === 'admin'
 
   const items = [
     { id: 'dashboard', icon: '🏠', label: 'Главная' },
   ]
-  if (!isJunior) items.push({ id: 'operation', icon: '➕', label: 'Операция' })
   if (!isJunior) items.push({ id: 'expenses', icon: '💰', label: 'Расходы' })
   items.push(
-    { id: 'history',   icon: '📋', label: 'История' },
-    { id: 'debts',     icon: '🔴', label: 'Долги' },
-    { id: 'report',    icon: '📊', label: 'Сводка' },
-    { id: 'analytics', icon: '📈', label: 'Аналитика' },
+    { id: 'history', icon: '📋', label: 'История' },
+    { id: 'debts',   icon: '🔴', label: 'Долги'   },
+    { id: 'reports', icon: '📊', label: 'Отчёты'  },
   )
   if (isAdmin) items.push({ id: 'admin', icon: '⚙️', label: 'Управление' })
-  items.push({ id: 'help', icon: '❓', label: 'Помощь' })
 
   return (
     <nav className="bottom-nav">

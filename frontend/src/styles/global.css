@@ -27,19 +27,17 @@
   --teal:   #5ac8fa;
 }
 
-/* ── Тёмная тема ─────────────────────────────────────────────────────────── */
-@media (prefers-color-scheme: dark) {
-  :root {
-    --bg:        var(--tg-theme-bg-color, #000000);
-    --bg2:       var(--tg-theme-secondary-bg-color, #1c1c1e);
-    --bg3:       rgba(118, 118, 128, 0.18);
-    --text:      var(--tg-theme-text-color, #ffffff);
-    --hint:      var(--tg-theme-hint-color, #8e8e93);
-    --separator: rgba(84, 84, 88, 0.55);
-    --shadow-sm: 0 1px 3px rgba(0,0,0,.3);
-    --shadow:    0 4px 16px rgba(0,0,0,.4);
-    --shadow-lg: 0 8px 32px rgba(0,0,0,.6);
-  }
+/* ── Тёмная тема (через data-theme от Telegram или ОС) ──────────────────── */
+[data-theme="dark"] {
+  --bg:        var(--tg-theme-bg-color, #000000);
+  --bg2:       var(--tg-theme-secondary-bg-color, #1c1c1e);
+  --bg3:       rgba(118, 118, 128, 0.18);
+  --text:      var(--tg-theme-text-color, #ffffff);
+  --hint:      var(--tg-theme-hint-color, #aeaeb2);
+  --separator: rgba(84, 84, 88, 0.55);
+  --shadow-sm: 0 1px 3px rgba(0,0,0,.3);
+  --shadow:    0 4px 16px rgba(0,0,0,.4);
+  --shadow-lg: 0 8px 32px rgba(0,0,0,.6);
 }
 
 /* ── Базовые стили ───────────────────────────────────────────────────────── */
@@ -417,10 +415,8 @@ select.input-field {
 .user-role.user   { background: rgba(0, 122, 255, 0.12); color: var(--blue); }
 .user-role.junior { background: var(--bg3); color: var(--hint); }
 
-@media (prefers-color-scheme: dark) {
-  .user-role.admin  { background: rgba(255, 214, 10, 0.18); color: #ffd60a; }
-  .user-role.user   { background: rgba(0, 122, 255, 0.18); color: #4da3ff; }
-}
+[data-theme="dark"] .user-role.admin  { background: rgba(255, 214, 10, 0.18); color: #ffd60a; }
+[data-theme="dark"] .user-role.user   { background: rgba(0, 122, 255, 0.18); color: #4da3ff; }
 
 /* ── Helpers ─────────────────────────────────────────────────────────────── */
 .hint { color: var(--hint); font-size: 13px; }

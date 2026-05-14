@@ -26,11 +26,18 @@ export default function Dashboard({ user, setPage }) {
           <div style={{ fontSize: 13, color: "var(--hint)" }}>Привет,</div>
           <div style={{ fontSize: 20, fontWeight: 700 }}>{user?.display_name || "Гость"}</div>
         </div>
-        {user?.role === "admin" && (
-          <div style={{ background: "#ffd60a22", color: "#b8920a", fontSize: 11, fontWeight: 700, padding: "4px 10px", borderRadius: 12 }}>
-            👑 Админ
-          </div>
-        )}
+        <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+          {user?.role === "admin" && (
+            <div style={{ background: "#ffd60a22", color: "#b8920a", fontSize: 11, fontWeight: 700, padding: "4px 10px", borderRadius: 12 }}>
+              👑 Админ
+            </div>
+          )}
+          <button
+            onClick={() => setPage("help")}
+            style={{ background: "var(--bg3)", border: "none", borderRadius: "50%", width: 34, height: 34, fontSize: 17, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}
+            title="Помощь"
+          >❓</button>
+        </div>
       </div>
 
       <div className="card" style={{ background: "var(--btn)", color: "var(--btn-text)", borderRadius: "var(--radius)", marginBottom: 16 }}>
@@ -92,9 +99,9 @@ export default function Dashboard({ user, setPage }) {
       <div className="section-title mt-16">Быстрые действия</div>
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
         <button className="btn btn-primary" onClick={() => setPage("operation")}>➕ Операция</button>
-        <button className="btn btn-secondary" onClick={() => setPage("report")}>📊 Сводка</button>
+        <button className="btn btn-secondary" onClick={() => setPage("expenses")}>💰 Расходы</button>
         <button className="btn btn-secondary" onClick={() => setPage("history")}>📋 История</button>
-        <button className="btn btn-secondary" onClick={() => setPage("debts")}>🔴 Долги</button>
+        <button className="btn btn-secondary" onClick={() => setPage("reports")}>📊 Отчёты</button>
       </div>
     </div>
   )
