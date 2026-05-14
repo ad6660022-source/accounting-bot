@@ -320,10 +320,22 @@ async def delete_expense(session, expense_id: int) -> None:
 
 async def reset_all_data(session: AsyncSession, workspace_id: int | None = None) -> None:
     """Удаляет все ИП, транзакции, долги, расходы воркспейса."""
-    from sqlalchemy import update as sa_update
+    from sqlalchemy import select as sa_select
     if workspace_id is not None:
+        # Получаем id всех ИП воркспейса, чтобы удалить транзакции с NULL workspace_id
+        ip_ids_result = await session.execute(sa_select(IP.id).where(IP.workspace_id == workspace_id))
+        ip_ids = [r[0] for r in ip_ids_result.all()]
+
         await session.execute(delete(IpDebt).where(IpDebt.workspace_id == workspace_id))
-        await session.execute(delete(Transaction).where(Transaction.workspace_id == workspace_id))
+
+        # Удаляем транзакции по workspace_id ИЛИ по ip_id (для старых записей с NULL workspace_id)
+        if ip_ids:
+            await session.execute(delete(Transaction).where(
+                or_(Transaction.workspace_id == workspace_id, Transaction.ip_id.in_(ip_ids))
+            ))
+        else:
+            await session.execute(delete(Transaction).where(Transaction.workspace_id == workspace_id))
+
         await session.execute(delete(Expense).where(Expense.workspace_id == workspace_id))
         await session.execute(delete(IP).where(IP.workspace_id == workspace_id))
         users = await get_all_users(session, workspace_id=workspace_id)

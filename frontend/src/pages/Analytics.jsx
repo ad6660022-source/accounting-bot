@@ -2,6 +2,8 @@ import { useEffect, useState } from 'react'
 import client from '../api/client'
 import Loader from '../components/Loader'
 
+const tg = window.Telegram?.WebApp
+
 const PERIODS = [
   { key: 'today', label: 'Сегодня' },
   { key: 'week',  label: 'Неделя'  },
@@ -137,6 +139,29 @@ export default function Analytics() {
   const [ips, setIps] = useState([])
   const [data, setData] = useState(null)
   const [loading, setLoading] = useState(true)
+  const [exporting, setExporting] = useState(false)
+
+  const handleExport = async () => {
+    setExporting(true)
+    try {
+      const initData = tg?.initData || ''
+      const url = '/api/export/workspace'
+      const resp = await fetch(url, { headers: { 'X-Init-Data': initData } })
+      if (!resp.ok) throw new Error('Ошибка экспорта')
+      const blob = await resp.blob()
+      const link = document.createElement('a')
+      link.href = URL.createObjectURL(blob)
+      const cd = resp.headers.get('Content-Disposition') || ''
+      const match = cd.match(/filename\*=UTF-8''(.+)/)
+      link.download = match ? decodeURIComponent(match[1]) : 'report.xlsx'
+      link.click()
+      URL.revokeObjectURL(link.href)
+    } catch {
+      // ignore
+    } finally {
+      setExporting(false)
+    }
+  }
 
   useEffect(() => {
     client.get('/balance').then(r => setIps(r.data.ips || [])).catch(console.error)
@@ -181,6 +206,15 @@ export default function Analytics() {
           </button>
         ))}
       </div>
+
+      <button
+        className="btn btn-secondary"
+        onClick={handleExport}
+        disabled={exporting}
+        style={{ marginBottom: 16, fontSize: 14 }}
+      >
+        {exporting ? '⏳ Формируем...' : '📥 Экспорт в Excel'}
+      </button>
 
       {loading ? <Loader /> : data && (
         <>
