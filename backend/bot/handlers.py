@@ -48,18 +48,36 @@ def _onboarding_keyboard() -> InlineKeyboardMarkup:
     ])
 
 
+# Варианты срока подписки: (месяцев, ярлык, скидка%)
+_DURATIONS = [
+    (1,  "1 месяц",    0),
+    (3,  "3 месяца",  10),
+    (6,  "6 месяцев", 20),
+    (12, "12 месяцев", 30),
+]
+
+
 def _subscribe_keyboard() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(
-            text=f"⭐ Pro — {settings.pro_price_stars} ⭐/мес (~{settings.pro_price_stars * 1.82:.0f} руб)",
-            callback_data="sub_pro",
-        )],
-        [InlineKeyboardButton(
-            text=f"💎 Business — {settings.business_price_stars} ⭐/мес (~{settings.business_price_stars * 1.82:.0f} руб)",
-            callback_data="sub_business",
-        )],
-        [InlineKeyboardButton(text="◀️ Отмена", callback_data="sub_cancel")],
+        [InlineKeyboardButton(text="⭐ Pro", callback_data="sub_choose_pro")],
+        [InlineKeyboardButton(text="💎 Business", callback_data="sub_choose_business")],
+        [InlineKeyboardButton(text="❌ Отмена", callback_data="sub_cancel")],
     ])
+
+
+def _duration_keyboard(plan: str) -> InlineKeyboardMarkup:
+    base = settings.pro_price_stars if plan == "pro" else settings.business_price_stars
+    rows = []
+    for months, label, discount in _DURATIONS:
+        total = int(base * months * (1 - discount / 100))
+        per_month = total // months
+        badge = f" 🔥 -{discount}%" if discount else ""
+        rows.append([InlineKeyboardButton(
+            text=f"{label} — {total} ⭐  ({per_month} ⭐/мес){badge}",
+            callback_data=f"sub_pay_{plan}_{months}",
+        )])
+    rows.append([InlineKeyboardButton(text="◀️ Назад к тарифам", callback_data="sub_back")])
+    return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
 # ── /start ────────────────────────────────────────────────────────────────────
@@ -256,6 +274,48 @@ async def cmd_plan(message: Message, db_user: User, session: AsyncSession) -> No
 
 # ── /subscribe — подписка ─────────────────────────────────────────────────────
 
+def _subscribe_text(ws) -> str:
+    from datetime import timezone as _tz
+    limits = PLAN_LIMITS.get(ws.plan, PLAN_LIMITS["free"])
+
+    if ws.plan == "free":
+        status = "📦 Сейчас: <b>Free</b>"
+    else:
+        if ws.sub_end:
+            end = ws.sub_end
+            if end.tzinfo is None:
+                end = end.replace(tzinfo=_tz.utc)
+            days = (end - datetime.now(_tz.utc)).days
+            if days > 0:
+                status = f"✅ Сейчас: <b>{limits['label']}</b> — ещё {days} дн. (до {end.strftime('%d.%m.%Y')})"
+            else:
+                status = f"⚠️ Сейчас: <b>{limits['label']}</b> — <b>истекла</b>"
+        else:
+            status = f"✅ Сейчас: <b>{limits['label']}</b>"
+
+    pro_m = settings.pro_price_stars
+    biz_m = settings.business_price_stars
+
+    return (
+        f"💳 <b>Тарифные планы</b>\n\n"
+        f"{status}\n\n"
+        f"─────────────────────\n"
+        f"📦 <b>Free</b> — бесплатно\n"
+        f"  • 1 ИП\n"
+        f"  • 2 участника\n\n"
+        f"⭐ <b>Pro</b> — от {pro_m} ⭐/мес\n"
+        f"  • До 5 ИП\n"
+        f"  • До 10 участников\n"
+        f"  • Полная история операций\n\n"
+        f"💎 <b>Business</b> — от {biz_m} ⭐/мес\n"
+        f"  • Неограниченно ИП\n"
+        f"  • Неограниченно участников\n"
+        f"  • Приоритетная поддержка\n"
+        f"─────────────────────\n"
+        f"<i>1 ⭐ ≈ 1.5–2 руб · оплата через Telegram Stars</i>"
+    )
+
+
 @router.message(Command("subscribe"))
 async def cmd_subscribe(message: Message, db_user: User, session: AsyncSession) -> None:
     if not db_user.workspace_id:
@@ -264,34 +324,65 @@ async def cmd_subscribe(message: Message, db_user: User, session: AsyncSession) 
 
     ws = await crud.get_workspace(session, db_user.workspace_id)
     if ws is None or ws.owner_id != db_user.id:
-        await message.answer("Управлять подпиской может только владелец пространства.")
+        await message.answer("⛔ Управлять подпиской может только <b>владелец</b> пространства.")
         return
 
-    await message.answer(
-        f"💳 <b>Выберите тариф</b>\n\n"
-        f"⭐ <b>Pro</b> — {settings.pro_price_stars} Stars/мес\n"
-        f"  • До 5 ИП\n"
-        f"  • До 10 участников\n\n"
-        f"💎 <b>Business</b> — {settings.business_price_stars} Stars/мес\n"
-        f"  • Без ограничений на ИП\n"
-        f"  • Без ограничений на участников\n",
-        reply_markup=_subscribe_keyboard(),
-    )
+    await message.answer(_subscribe_text(ws), reply_markup=_subscribe_keyboard())
 
 
-@router.callback_query(F.data.in_({"sub_pro", "sub_business"}))
-async def sub_pay(call: CallbackQuery, db_user: User, bot: Bot) -> None:
-    plan = "pro" if call.data == "sub_pro" else "business"
-    stars = settings.pro_price_stars if plan == "pro" else settings.business_price_stars
+@router.callback_query(F.data.in_({"sub_choose_pro", "sub_choose_business"}))
+async def sub_choose_plan(call: CallbackQuery, db_user: User, session: AsyncSession) -> None:
+    plan = "pro" if call.data == "sub_choose_pro" else "business"
     label = PLAN_LIMITS[plan]["label"]
+    base = settings.pro_price_stars if plan == "pro" else settings.business_price_stars
+
+    text = (
+        f"{'⭐' if plan == 'pro' else '💎'} <b>Тариф {label}</b>\n\n"
+        f"Выберите срок подписки.\n"
+        f"Чем длиннее срок — тем выгоднее цена:\n\n"
+    )
+    for months, lbl, discount in _DURATIONS:
+        total = int(base * months * (1 - discount / 100))
+        per_m = total // months
+        saved = base * months - total
+        line = f"  <b>{lbl}</b> — {total} ⭐  ({per_m} ⭐/мес)"
+        if discount:
+            line += f"  <i>экономия {saved} ⭐</i>"
+        text += line + "\n"
+
+    await call.message.edit_text(text, reply_markup=_duration_keyboard(plan))
+    await call.answer()
+
+
+@router.callback_query(F.data == "sub_back")
+async def sub_back(call: CallbackQuery, db_user: User, session: AsyncSession) -> None:
+    ws = await crud.get_workspace(session, db_user.workspace_id)
+    await call.message.edit_text(_subscribe_text(ws), reply_markup=_subscribe_keyboard())
+    await call.answer()
+
+
+@router.callback_query(F.data.startswith("sub_pay_"))
+async def sub_pay(call: CallbackQuery, db_user: User, bot: Bot) -> None:
+    # формат: sub_pay_{plan}_{months}
+    _, _, plan, months_str = call.data.split("_", 3)
+    months = int(months_str)
+    base = settings.pro_price_stars if plan == "pro" else settings.business_price_stars
+    discount = next((d for m, _, d in _DURATIONS if m == months), 0)
+    total_stars = int(base * months * (1 - discount / 100))
+    label = PLAN_LIMITS[plan]["label"]
+
+    duration_label = next((l for m, l, _ in _DURATIONS if m == months), f"{months} мес.")
 
     await bot.send_invoice(
         chat_id=call.from_user.id,
-        title=f"Подписка {label}",
-        description=f"Бухгалтер ИП — тариф {label} на 30 дней",
-        payload=f"sub_{plan}_{db_user.workspace_id}",
+        title=f"{label} — {duration_label}",
+        description=(
+            f"Бухгалтер ИП · тариф {label} · {duration_label}\n"
+            f"{'До 5 ИП и 10 участников' if plan == 'pro' else 'Без ограничений'}"
+        ),
+        payload=f"sub_{plan}_{db_user.workspace_id}_{months}",
         currency="XTR",
-        prices=[LabeledPrice(label=f"Подписка {label}", amount=stars)],
+        prices=[LabeledPrice(label=f"{label} {duration_label}", amount=total_stars)],
     )
     await call.answer()
 
@@ -299,6 +390,7 @@ async def sub_pay(call: CallbackQuery, db_user: User, bot: Bot) -> None:
 @router.callback_query(F.data == "sub_cancel")
 async def sub_cancel(call: CallbackQuery) -> None:
     await call.message.edit_text("Отменено.", reply_markup=None)
+    await call.answer()
 
 
 @router.pre_checkout_query()
@@ -310,27 +402,31 @@ async def pre_checkout(query: PreCheckoutQuery) -> None:
 async def successful_payment(message: Message, db_user: User, session: AsyncSession) -> None:
     payload = message.successful_payment.invoice_payload
     parts = payload.split("_")
-    if len(parts) < 3 or parts[0] != "sub":
+    # формат: sub_{plan}_{workspace_id}_{months}
+    if len(parts) < 4 or parts[0] != "sub":
         return
 
     plan = parts[1]
     workspace_id = int(parts[2])
+    months = int(parts[3])
 
     async with session.begin():
         ws = await crud.get_workspace(session, workspace_id)
         if ws and ws.owner_id == db_user.id:
             now = datetime.now(timezone.utc)
             if ws.sub_end and ws.sub_end > now:
-                new_end = ws.sub_end + timedelta(days=30)
+                new_end = ws.sub_end + timedelta(days=30 * months)
             else:
-                new_end = now + timedelta(days=30)
+                new_end = now + timedelta(days=30 * months)
             await crud.set_workspace_plan(session, workspace_id, plan, new_end)
 
     plan_label = PLAN_LIMITS.get(plan, {}).get("label", plan)
+    duration_label = next((l for m, l, _ in _DURATIONS if m == months), f"{months} мес.")
     await message.answer(
         f"✅ <b>Оплата прошла!</b>\n\n"
         f"Тариф: <b>{plan_label}</b>\n"
-        f"Действует 30 дней.",
+        f"Срок: <b>{duration_label}</b>\n"
+        f"Действует до: <b>{new_end.strftime('%d.%m.%Y')}</b>",
         reply_markup=_webapp_keyboard(),
     )
 
