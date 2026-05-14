@@ -47,11 +47,16 @@ _MIGRATIONS = [
 
 
 async def init_db() -> None:
+    # Сначала создаём таблицы (на свежей БД их нет)
     async with engine.begin() as conn:
-        for sql in _MIGRATIONS:
-            try:
-                await conn.execute(text(sql))
-            except Exception as e:
-                logger.debug("Migration skipped (%s): %s", sql[:60], e)
         await conn.run_sync(Base.metadata.create_all)
+
+    # Затем накатываем миграции — каждая в своей транзакции
+    for sql in _MIGRATIONS:
+        try:
+            async with engine.begin() as conn:
+                await conn.execute(text(sql))
+        except Exception as e:
+            logger.debug("Migration skipped (%s): %s", sql[:60], e)
+
     logger.info("База данных инициализирована")
