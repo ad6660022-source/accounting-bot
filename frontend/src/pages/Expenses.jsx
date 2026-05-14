@@ -116,9 +116,9 @@ function WriteOffModal({ expense, ips, alreadyWrittenOff, onClose, onDone }) {
 
     setLoading(true)
     try {
-      await Promise.all(
-        toPost.map(e => client.post('/expenses/' + expense.id + '/writeoffs', e))
-      )
+      for (const e of toPost) {
+        await client.post('/expenses/' + expense.id + '/writeoffs', e)
+      }
       onDone()
     } catch (e) {
       setToast('Ошибка: ' + (e.response?.data?.detail || 'неизвестная'))

@@ -74,6 +74,7 @@ async def write_off(
     expense_id: int,
     body: WriteOffRequest,
     current_user: User = Depends(get_regular_user),
+    workspace_id: int = Depends(get_workspace_id),
     session: AsyncSession = Depends(get_session),
 ) -> dict:
     if body.source not in ("cash", "bank", "debit"):
@@ -86,6 +87,7 @@ async def write_off(
             amount=body.amount,
             source=body.source,
             user_id=current_user.id,
+            workspace_id=workspace_id,
         )
     except InsufficientFundsError as e:
         raise HTTPException(status_code=400, detail=str(e))

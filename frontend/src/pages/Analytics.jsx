@@ -25,10 +25,91 @@ function fmt(n) {
   return new Intl.NumberFormat('ru-RU').format(n ?? 0) + ' ₽'
 }
 
-function AnalyticsSection({ title, rows, byType, total, colorClass }) {
+function fmtShort(n) {
+  if (n >= 1_000_000) return (n / 1_000_000).toFixed(1) + 'М'
+  if (n >= 1_000) return (n / 1_000).toFixed(0) + 'К'
+  return String(n)
+}
+
+// ── Summary bar chart: income vs expense ─────────────────────────────────────
+
+function SummaryChart({ totalIncome, totalExpense }) {
+  const max = Math.max(totalIncome, totalExpense, 1)
+  const incPct = Math.round((totalIncome / max) * 100)
+  const expPct = Math.round((totalExpense / max) * 100)
+  const profit = totalIncome - totalExpense
+
   return (
     <div className="card" style={{ marginBottom: 12 }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+      <div style={{ fontWeight: 700, fontSize: 15, marginBottom: 12 }}>📊 Сводка</div>
+
+      <div style={{ marginBottom: 8 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, marginBottom: 4 }}>
+          <span style={{ color: 'var(--hint)' }}>Поступления</span>
+          <span style={{ fontWeight: 600, color: '#34c759' }}>{fmt(totalIncome)}</span>
+        </div>
+        <div style={{ background: 'var(--bg)', borderRadius: 4, height: 10, overflow: 'hidden' }}>
+          <div style={{ width: incPct + '%', height: '100%', background: '#34c759', borderRadius: 4, transition: 'width .4s' }} />
+        </div>
+      </div>
+
+      <div style={{ marginBottom: 12 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, marginBottom: 4 }}>
+          <span style={{ color: 'var(--hint)' }}>Расходы</span>
+          <span style={{ fontWeight: 600, color: '#ff3b30' }}>{fmt(totalExpense)}</span>
+        </div>
+        <div style={{ background: 'var(--bg)', borderRadius: 4, height: 10, overflow: 'hidden' }}>
+          <div style={{ width: expPct + '%', height: '100%', background: '#ff3b30', borderRadius: 4, transition: 'width .4s' }} />
+        </div>
+      </div>
+
+      <div style={{
+        display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+        borderTop: '1px solid var(--border)', paddingTop: 10,
+      }}>
+        <span style={{ fontSize: 14, fontWeight: 600 }}>Прибыль</span>
+        <span style={{ fontSize: 16, fontWeight: 700, color: profit >= 0 ? '#34c759' : '#ff3b30' }}>{fmt(profit)}</span>
+      </div>
+    </div>
+  )
+}
+
+// ── Breakdown bar chart ───────────────────────────────────────────────────────
+
+function BreakdownChart({ rows, byType, color }) {
+  const values = rows.map(r => byType[r.type] || 0)
+  const max = Math.max(...values, 1)
+  const hasData = values.some(v => v > 0)
+  if (!hasData) return null
+
+  return (
+    <div style={{ marginTop: 12 }}>
+      {rows.map((row, i) => {
+        const val = values[i]
+        if (!val) return null
+        const pct = Math.round((val / max) * 100)
+        return (
+          <div key={row.type} style={{ marginBottom: 8 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, marginBottom: 3 }}>
+              <span style={{ color: 'var(--hint)' }}>{row.icon} {row.label}</span>
+              <span style={{ fontWeight: 600 }}>{fmtShort(val)}</span>
+            </div>
+            <div style={{ background: 'var(--bg)', borderRadius: 3, height: 6, overflow: 'hidden' }}>
+              <div style={{ width: pct + '%', height: '100%', background: color, borderRadius: 3, transition: 'width .4s' }} />
+            </div>
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
+// ── Section with breakdown ────────────────────────────────────────────────────
+
+function AnalyticsSection({ title, rows, byType, total, colorClass, barColor }) {
+  return (
+    <div className="card" style={{ marginBottom: 12 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
         <div style={{ fontWeight: 700, fontSize: 15 }}>{title}</div>
         <div style={{ fontWeight: 700, fontSize: 16 }} className={'report-value ' + colorClass}>{fmt(total)}</div>
       </div>
@@ -45,6 +126,7 @@ function AnalyticsSection({ title, rows, byType, total, colorClass }) {
       {rows.every(r => !(byType[r.type])) && (
         <div style={{ fontSize: 13, color: 'var(--hint)', textAlign: 'center' }}>Нет данных</div>
       )}
+      <BreakdownChart rows={rows} byType={byType} color={barColor} />
     </div>
   )
 }
@@ -102,12 +184,14 @@ export default function Analytics() {
 
       {loading ? <Loader /> : data && (
         <>
+          <SummaryChart totalIncome={data.total_income} totalExpense={data.total_expense} />
           <AnalyticsSection
             title="📈 Поступления"
             rows={INCOME_ROWS}
             byType={data.by_type}
             total={data.total_income}
             colorClass="green"
+            barColor="#34c759"
           />
           <AnalyticsSection
             title="📉 Траты"
@@ -115,6 +199,7 @@ export default function Analytics() {
             byType={data.by_type}
             total={data.total_expense}
             colorClass="red"
+            barColor="#ff3b30"
           />
         </>
       )}

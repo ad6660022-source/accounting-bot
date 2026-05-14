@@ -232,7 +232,7 @@ async def edit_operation(session, tx_id: int, admin_id: int, new_amount: int | N
     return tx
 
 
-async def write_off_expense(session, expense_id: int, ip_id: int, amount: int, source: str, user_id: int) -> Transaction:
+async def write_off_expense(session, expense_id: int, ip_id: int, amount: int, source: str, user_id: int, workspace_id: int | None = None) -> Transaction:
     expense = await crud.get_expense(session, expense_id)
     if expense is None:
         raise ValueError("Расход не найден")
@@ -258,6 +258,7 @@ async def write_off_expense(session, expense_id: int, ip_id: int, amount: int, s
     tx = Transaction(
         user_id=user_id,
         ip_id=ip_id,
+        workspace_id=workspace_id,
         type=TxType.EXPENSE_WRITEOFF,
         amount=amount,
         comment=expense.description,

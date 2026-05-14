@@ -14,6 +14,7 @@ export default function BottomNav({ page, setPage, userRole }) {
     { id: 'analytics', icon: '📈', label: 'Аналитика' },
   )
   if (isAdmin) items.push({ id: 'admin', icon: '⚙️', label: 'Управление' })
+  items.push({ id: 'help', icon: '❓', label: 'Помощь' })
 
   return (
     <nav className="bottom-nav">
