@@ -348,3 +348,38 @@ async def reset_all_data(session: AsyncSession, workspace_id: int | None = None)
     for u in users:
         u.cash_balance = 0
     logger.info("Все данные сброшены (workspace=%s)", workspace_id)
+
+
+# ── Глобальная статистика (для создателя бота) ────────────────────────────────
+
+async def get_global_stats(session: AsyncSession) -> dict:
+    from sqlalchemy import func as sa_func
+    from datetime import timezone
+
+    total_users = (await session.execute(select(sa_func.count(User.id)))).scalar() or 0
+    total_workspaces = (await session.execute(select(sa_func.count(Workspace.id)))).scalar() or 0
+
+    plan_counts: dict[str, int] = {}
+    rows = (await session.execute(select(Workspace.plan, sa_func.count(Workspace.id)).group_by(Workspace.plan))).all()
+    for plan, cnt in rows:
+        plan_counts[plan] = cnt
+
+    now = datetime.now(timezone.utc)
+    active_subs = (await session.execute(
+        select(sa_func.count(Workspace.id)).where(
+            Workspace.plan != "free",
+            Workspace.sub_end > now,
+        )
+    )).scalar() or 0
+
+    total_txs = (await session.execute(select(sa_func.count(Transaction.id)))).scalar() or 0
+    total_ips = (await session.execute(select(sa_func.count(IP.id)))).scalar() or 0
+
+    return {
+        "total_users": total_users,
+        "total_workspaces": total_workspaces,
+        "plan_counts": plan_counts,
+        "active_subs": active_subs,
+        "total_transactions": total_txs,
+        "total_ips": total_ips,
+    }

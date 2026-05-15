@@ -41,6 +41,16 @@ def _webapp_keyboard() -> InlineKeyboardMarkup:
     ]])
 
 
+def _webapp_with_sub_keyboard() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(
+            text="📱 Открыть бухгалтерию",
+            web_app=WebAppInfo(url=settings.webapp_url),
+        )],
+        [InlineKeyboardButton(text="⭐ Тарифы и подписка", callback_data="show_plans")],
+    ])
+
+
 def _onboarding_keyboard() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="🏢 Создать пространство", callback_data="ws_create")],
@@ -116,9 +126,18 @@ async def cmd_start(message: Message, db_user: User, bot: Bot, session: AsyncSes
     if not db_user.workspace_id:
         await message.answer(
             f"👋 Привет, <b>{name}</b>!\n\n"
-            f"Добро пожаловать в <b>Бухгалтер ИП</b>.\n\n"
-            f"Для начала работы создайте рабочее пространство "
-            f"или присоединитесь к существующему по коду:{admin_note}",
+            f"<b>Бухгалтер ИП</b> — учёт финансов для малого бизнеса прямо в Telegram.\n\n"
+            f"<b>Что умеет бот:</b>\n"
+            f"💰 Ведёт баланс: наличные, расчётный счёт, дебет-карта\n"
+            f"📊 Аналитика доходов и расходов по периодам\n"
+            f"💸 Учёт расходов с распределением по ИП\n"
+            f"🤝 Долги между ИП — выдача и погашение\n"
+            f"📋 История всех операций с фильтрами\n"
+            f"📥 Выгрузка в Excel с аналитическим листом\n"
+            f"👥 Командная работа — несколько ИП в одном пространстве\n"
+            f"🔒 Роли: Администратор, Пользователь, Наблюдатель\n\n"
+            f"Для начала создайте рабочее пространство "
+            f"или войдите по коду приглашения:{admin_note}",
             reply_markup=_onboarding_keyboard(),
         )
         return
@@ -126,9 +145,15 @@ async def cmd_start(message: Message, db_user: User, bot: Bot, session: AsyncSes
     role_label = "👑 Администратор" if db_user.role == "admin" else "👤 Пользователь"
     await message.answer(
         f"👋 Привет, <b>{name}</b>!\n\n"
+        f"<b>Бухгалтер ИП</b> — учёт финансов для малого бизнеса.\n\n"
         f"Роль: {role_label}\n\n"
-        f"Используй кнопку ниже для работы с бухгалтерией.{admin_note}",
-        reply_markup=_webapp_keyboard(),
+        f"<b>Возможности:</b>\n"
+        f"💰 Баланс нал / Р/С / дебет по каждому ИП\n"
+        f"📊 Аналитика и сводки за любой период\n"
+        f"💸 Расходы, списания, долги между ИП\n"
+        f"📥 Экспорт в Excel одной кнопкой\n\n"
+        f"Используй кнопку ниже для открытия приложения.{admin_note}",
+        reply_markup=_webapp_with_sub_keyboard(),
     )
 
 
@@ -387,6 +412,19 @@ async def sub_pay(call: CallbackQuery, db_user: User, bot: Bot) -> None:
     await call.answer()
 
 
+@router.callback_query(F.data == "show_plans")
+async def show_plans_from_main(call: CallbackQuery, db_user: User, session: AsyncSession) -> None:
+    if not db_user.workspace_id:
+        await call.answer("Сначала создайте рабочее пространство", show_alert=True)
+        return
+    ws = await crud.get_workspace(session, db_user.workspace_id)
+    if ws is None or ws.owner_id != db_user.id:
+        await call.answer("Управлять подпиской может только владелец пространства", show_alert=True)
+        return
+    await call.message.edit_text(_subscribe_text(ws), reply_markup=_subscribe_keyboard())
+    await call.answer()
+
+
 @router.callback_query(F.data == "sub_cancel")
 async def sub_cancel(call: CallbackQuery) -> None:
     await call.message.edit_text("Отменено.", reply_markup=None)
@@ -457,6 +495,40 @@ async def cmd_invite(message: Message, db_user: User, session: AsyncSession) -> 
         f"Код: <code>{ws.invite_code}</code>\n\n"
         f"Участники: {member_count} / {limits['members']}\n\n"
         f"Отправьте этот код коллеге. Он введёт его в боте через /start.",
+    )
+
+
+# ── /stats — статистика для создателя бота ───────────────────────────────────
+
+@router.message(Command("stats"))
+async def cmd_stats(message: Message, db_user: User, session: AsyncSession) -> None:
+    if message.from_user.id not in settings.admin_ids_list:
+        await message.answer("⛔ Команда доступна только создателю бота.")
+        return
+
+    stats = await crud.get_global_stats(session)
+    plan_counts = stats["plan_counts"]
+    free_ws  = plan_counts.get("free", 0)
+    pro_ws   = plan_counts.get("pro", 0)
+    biz_ws   = plan_counts.get("business", 0)
+    total_ws = stats["total_workspaces"]
+    paid_ws  = pro_ws + biz_ws
+
+    await message.answer(
+        f"📊 <b>Статистика бота</b>\n\n"
+        f"👥 <b>Пользователи</b>\n"
+        f"  Всего: <b>{stats['total_users']}</b>\n\n"
+        f"🏢 <b>Рабочие пространства</b>\n"
+        f"  Всего: <b>{total_ws}</b>\n"
+        f"  📦 Free: <b>{free_ws}</b>\n"
+        f"  ⭐ Pro: <b>{pro_ws}</b>\n"
+        f"  💎 Business: <b>{biz_ws}</b>\n\n"
+        f"💳 <b>Подписки</b>\n"
+        f"  Платных пространств: <b>{paid_ws}</b>\n"
+        f"  Активных прямо сейчас: <b>{stats['active_subs']}</b>\n\n"
+        f"📋 <b>Контент</b>\n"
+        f"  ИП создано: <b>{stats['total_ips']}</b>\n"
+        f"  Операций в системе: <b>{stats['total_transactions']}</b>",
     )
 
 
