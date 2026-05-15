@@ -16,25 +16,25 @@ async def process_operation(session, user_id, op_type, amount, ip_id=None, targe
     if user is None:
         raise ValueError(f"Пользователь {user_id} не найден")
 
-    if op_type == TxType.ZAKUP:
+    if op_type in (TxType.ZAKUP, TxType.STORONNIE):
         if ip_id is None:
             raise ValueError("Не указано ИП")
         ip = await crud.get_ip(session, ip_id)
         if ip is None:
             raise ValueError("ИП не найдено")
-        if ip.cash_balance < amount:
-            raise InsufficientFundsError(f"Недостаточно наличных у ИП.\nОстаток: {ip.cash_balance:,} ₽")
-        await crud.update_ip_cash(session, ip_id, -amount)
-
-    elif op_type == TxType.STORONNIE:
-        if ip_id is None:
-            raise ValueError("Не указано ИП")
-        ip = await crud.get_ip(session, ip_id)
-        if ip is None:
-            raise ValueError("ИП не найдено")
-        if ip.cash_balance < amount:
-            raise InsufficientFundsError(f"Недостаточно наличных у ИП.\nОстаток: {ip.cash_balance:,} ₽")
-        await crud.update_ip_cash(session, ip_id, -amount)
+        source = destination or "cash"
+        if source == "bank":
+            if ip.bank_balance < amount:
+                raise InsufficientFundsError(f"Недостаточно средств на Р/С.\nОстаток: {ip.bank_balance:,} ₽")
+            await crud.update_ip_bank(session, ip_id, -amount)
+        elif source == "debit":
+            if ip.debit_balance < amount:
+                raise InsufficientFundsError(f"Недостаточно средств на Дебете.\nОстаток: {ip.debit_balance:,} ₽")
+            await crud.update_ip_debit(session, ip_id, -amount)
+        else:
+            if ip.cash_balance < amount:
+                raise InsufficientFundsError(f"Недостаточно наличных у ИП.\nОстаток: {ip.cash_balance:,} ₽")
+            await crud.update_ip_cash(session, ip_id, -amount)
 
     elif op_type in (TxType.PRIHOD_MES, TxType.PRIHOD_FAST, TxType.PRIHOD_STO):
         if ip_id is None:
@@ -131,7 +131,7 @@ def _get_balance_delta(tx: Transaction) -> tuple[int, int, int]:
     dest = tx.destination or "cash"
 
     if t in (TxType.ZAKUP, TxType.STORONNIE, TxType.EXPENSE_WRITEOFF):
-        src = dest if t == TxType.EXPENSE_WRITEOFF else "cash"
+        src = dest  # destination хранит источник списания для расходных операций
         if src == "bank":
             return (0, -a, 0)
         elif src == "debit":

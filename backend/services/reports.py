@@ -21,7 +21,8 @@ PERIOD_LABELS = {
 
 
 def _period_start(period: str) -> datetime | None:
-    now = datetime.now(tz=timezone.utc)
+    # Возвращаем naive UTC — DB хранит DateTime без timezone
+    now = datetime.utcnow()
     if period == "today":
         return now.replace(hour=0, minute=0, second=0, microsecond=0)
     if period == "week":

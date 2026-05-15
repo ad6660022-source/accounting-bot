@@ -6,11 +6,11 @@ import Toast from "../components/Toast"
 const tg = window.Telegram?.WebApp
 
 const OPERATIONS = [
-  { type: "zakup",       icon: "🛒", label: "Закуп",            needsIp: true,  needsTargetIp: false, needsComment: true,  needsDestination: false },
-  { type: "storonnie",   icon: "💸", label: "Посторонние траты", needsIp: true,  needsTargetIp: false, needsComment: true,  needsDestination: false },
-  { type: "prihod_mes",  icon: "📥", label: "Приход ежемес.",   needsIp: true,  needsTargetIp: false, needsComment: false, needsDestination: true  },
-  { type: "prihod_fast", icon: "⚡", label: "Приход быстрый",   needsIp: true,  needsTargetIp: false, needsComment: false, needsDestination: true  },
-  { type: "prihod_sto",  icon: "🏦", label: "Приход сторонний", needsIp: true,  needsTargetIp: false, needsComment: true,  needsDestination: true  },
+  { type: "zakup",       icon: "🛒", label: "Закуп",            needsIp: true,  needsTargetIp: false, needsComment: true,  needsDestination: true,  destinationLabel: "Откуда списать" },
+  { type: "storonnie",   icon: "💸", label: "Посторонние траты", needsIp: true,  needsTargetIp: false, needsComment: true,  needsDestination: true,  destinationLabel: "Откуда списать" },
+  { type: "prihod_mes",  icon: "📥", label: "Приход ежемес.",   needsIp: true,  needsTargetIp: false, needsComment: false, needsDestination: true,  destinationLabel: "Куда зачислить" },
+  { type: "prihod_fast", icon: "⚡", label: "Приход быстрый",   needsIp: true,  needsTargetIp: false, needsComment: false, needsDestination: true,  destinationLabel: "Куда зачислить" },
+  { type: "prihod_sto",  icon: "🏦", label: "Приход сторонний", needsIp: true,  needsTargetIp: false, needsComment: true,  needsDestination: true,  destinationLabel: "Куда зачислить" },
   { type: "snyat_rs",    icon: "💴", label: "Снять с Р/С",      needsIp: true,  needsTargetIp: false, needsComment: false, needsDestination: false },
   { type: "snyat_debit", icon: "💵", label: "Снять с Дебета",   needsIp: true,  needsTargetIp: false, needsComment: false, needsDestination: false },
   { type: "vnesti_rs",   icon: "🏛",  label: "Внести на Р/С",    needsIp: true,  needsTargetIp: false, needsComment: false, needsDestination: false },
@@ -142,7 +142,7 @@ export default function AddOperation({ user }) {
 
       {op?.needsDestination && (
         <div className="input-group">
-          <label className="input-label">Куда зачислить</label>
+          <label className="input-label">{op.destinationLabel}</label>
           <div style={{ display: "flex", gap: 8 }}>
             {DESTINATIONS.map(d => (
               <button
