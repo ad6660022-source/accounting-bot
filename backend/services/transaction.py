@@ -88,9 +88,19 @@ async def process_operation(session, user_id, op_type, amount, ip_id=None, targe
         creditor_ip = await crud.get_ip(session, ip_id)
         if creditor_ip is None:
             raise ValueError("ИП-кредитор не найдено")
-        if creditor_ip.cash_balance < amount:
-            raise InsufficientFundsError(f"Недостаточно наличных у ИП.\nОстаток: {creditor_ip.cash_balance:,} ₽")
-        await crud.update_ip_cash(session, ip_id, -amount)
+        source = destination or "cash"
+        if source == "bank":
+            if creditor_ip.bank_balance < amount:
+                raise InsufficientFundsError(f"Недостаточно средств на Р/С.\nОстаток: {creditor_ip.bank_balance:,} ₽")
+            await crud.update_ip_bank(session, ip_id, -amount)
+        elif source == "debit":
+            if creditor_ip.debit_balance < amount:
+                raise InsufficientFundsError(f"Недостаточно средств на Дебете.\nОстаток: {creditor_ip.debit_balance:,} ₽")
+            await crud.update_ip_debit(session, ip_id, -amount)
+        else:
+            if creditor_ip.cash_balance < amount:
+                raise InsufficientFundsError(f"Недостаточно наличных у ИП.\nОстаток: {creditor_ip.cash_balance:,} ₽")
+            await crud.update_ip_cash(session, ip_id, -amount)
         await crud.update_ip_cash(session, target_ip_id, +amount)
         await crud.create_ip_debt(session, ip_id, target_ip_id, amount, workspace_id=workspace_id)
 
@@ -149,7 +159,13 @@ def _get_balance_delta(tx: Transaction) -> tuple[int, int, int]:
         return (a, 0, -a)
     elif t == TxType.VNESTI_RS:
         return (-a, a, 0)
-    elif t in (TxType.ODOLZHIT, TxType.POGASIT):
+    elif t == TxType.ODOLZHIT:
+        if dest == "bank":
+            return (0, -a, 0)
+        elif dest == "debit":
+            return (0, 0, -a)
+        return (-a, 0, 0)
+    elif t == TxType.POGASIT:
         return (-a, 0, 0)
     return (0, 0, 0)
 

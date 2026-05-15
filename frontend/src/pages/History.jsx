@@ -3,6 +3,8 @@ import client from '../api/client'
 import Loader from '../components/Loader'
 import Toast from '../components/Toast'
 
+const DEST_LABELS = { cash: 'Наличные', bank: 'Р/С', debit: 'Дебет' }
+
 const TX_ICONS = {
   zakup:           '🛒',
   storonnie:       '💸',
@@ -26,6 +28,64 @@ function fmt(n) {
 
 function formatDate(iso) {
   return new Date(iso).toLocaleString('ru-RU', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })
+}
+
+function DetailModal({ tx, onClose, onEdit, onCancel, isAdmin }) {
+  const isPlus  = PLUS_TYPES.has(tx.type)
+  const isMinus = MINUS_TYPES.has(tx.type)
+  const sign = isPlus ? '+' : isMinus ? '-' : ''
+  const amtColor = tx.is_cancelled ? 'var(--hint)' : isPlus ? '#4caf50' : isMinus ? '#f44336' : 'var(--text)'
+
+  const EXPENSE_TYPES = new Set(['zakup', 'storonnie', 'expense_writeoff', 'odolzhit'])
+  const INCOME_TYPES  = new Set(['prihod_mes', 'prihod_fast', 'prihod_sto'])
+  let destRow = null
+  if (tx.destination) {
+    const label = DEST_LABELS[tx.destination] || tx.destination
+    if (EXPENSE_TYPES.has(tx.type)) destRow = { k: 'Откуда списано', v: label }
+    else if (INCOME_TYPES.has(tx.type)) destRow = { k: 'Куда зачислено', v: label }
+  }
+
+  return (
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.6)', display: 'flex', alignItems: 'flex-end', zIndex: 200 }} onClick={onClose}>
+      <div style={{ background: 'var(--bg)', borderRadius: '20px 20px 0 0', padding: '24px 16px', width: '100%', boxSizing: 'border-box' }} onClick={e => e.stopPropagation()}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16 }}>
+          <span style={{ fontSize: 32 }}>{TX_ICONS[tx.type] || '💰'}</span>
+          <div style={{ flex: 1 }}>
+            <div style={{ fontWeight: 700, fontSize: 17 }}>{tx.type_label}</div>
+            {tx.is_cancelled && <div style={{ fontSize: 12, color: '#ff4444', marginTop: 2 }}>Отменено</div>}
+          </div>
+          <div style={{ fontSize: 20, fontWeight: 700, color: amtColor }}>{sign}{fmt(tx.amount)}</div>
+        </div>
+
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 20 }}>
+          {tx.ip_name && <Row k="ИП" v={tx.ip_name} />}
+          {destRow && <Row k={destRow.k} v={destRow.v} />}
+          {tx.comment && <Row k="Комментарий" v={tx.comment} multiline />}
+          <Row k="Дата" v={new Date(tx.created_at).toLocaleString('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })} />
+          {tx.user_name && <Row k="Провёл" v={tx.user_name} />}
+        </div>
+
+        <div style={{ display: 'flex', gap: 8 }}>
+          <button className="btn btn-secondary" onClick={onClose} style={{ flex: 1 }}>Закрыть</button>
+          {isAdmin && !tx.is_cancelled && (
+            <>
+              <button className="btn btn-secondary" onClick={() => { onClose(); onEdit(tx) }} style={{ flex: 1 }}>✏️ Изменить</button>
+              <button className="btn" onClick={() => { onClose(); onCancel(tx) }} style={{ flex: 1, background: '#ff4444', color: '#fff' }}>🗑 Отменить</button>
+            </>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function Row({ k, v, multiline }) {
+  return (
+    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: multiline ? 'flex-start' : 'center', gap: 12 }}>
+      <span style={{ color: 'var(--hint)', fontSize: 13, flexShrink: 0 }}>{k}</span>
+      <span style={{ fontSize: 14, fontWeight: 500, textAlign: 'right', wordBreak: 'break-word' }}>{v}</span>
+    </div>
+  )
 }
 
 function EditModal({ tx, onClose, onSaved }) {
@@ -124,6 +184,7 @@ export default function History({ user }) {
   const [dateTo, setDateTo] = useState('')
   const [showCancelled, setShowCancelled] = useState(false)
 
+  const [detailTx, setDetailTx] = useState(null)
   const [editingTx, setEditingTx] = useState(null)
   const [cancellingTx, setCancellingTx] = useState(null)
 
@@ -182,6 +243,15 @@ export default function History({ user }) {
   return (
     <div className="page-content">
       {toast && <Toast message={toast} onDone={() => setToast(null)} />}
+      {detailTx && (
+        <DetailModal
+          tx={detailTx}
+          isAdmin={isAdmin}
+          onClose={() => setDetailTx(null)}
+          onEdit={setEditingTx}
+          onCancel={setCancellingTx}
+        />
+      )}
       {editingTx && (
         <EditModal
           tx={editingTx}
@@ -285,7 +355,12 @@ export default function History({ user }) {
               formatDate(tx.created_at),
             ].filter(Boolean).join(' • ')
             return (
-              <div key={tx.id} className={'tx-item' + (tx.is_cancelled ? ' cancelled' : '')}>
+              <div
+                key={tx.id}
+                className={'tx-item' + (tx.is_cancelled ? ' cancelled' : '')}
+                style={{ cursor: 'pointer' }}
+                onClick={() => setDetailTx(tx)}
+              >
                 <div className="tx-icon">{TX_ICONS[tx.type] || '💰'}</div>
                 <div className="tx-info" style={{ flex: 1 }}>
                   <div className="tx-type">
@@ -296,20 +371,7 @@ export default function History({ user }) {
                 </div>
                 <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 4 }}>
                   <div className={'tx-amount ' + cls}>{sign}{fmt(tx.amount)}</div>
-                  {isAdmin && !tx.is_cancelled && (
-                    <div style={{ display: 'flex', gap: 4 }}>
-                      <button
-                        style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 16, padding: '0 4px' }}
-                        onClick={() => setEditingTx(tx)}
-                        title="Редактировать"
-                      >✏️</button>
-                      <button
-                        style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 16, padding: '0 4px' }}
-                        onClick={() => setCancellingTx(tx)}
-                        title="Отменить"
-                      >🗑</button>
-                    </div>
-                  )}
+                  <div style={{ fontSize: 11, color: 'var(--hint)' }}>›</div>
                 </div>
               </div>
             )

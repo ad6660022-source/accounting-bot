@@ -114,6 +114,7 @@ async def get_transactions(
             "ip_name": tx.ip.name if tx.ip else None,
             "user_name": tx.user.display_name if tx.user else None,
             "comment": tx.comment,
+            "destination": tx.destination,
             "is_cancelled": tx.is_cancelled,
             "created_at": tx.created_at.isoformat(),
         }

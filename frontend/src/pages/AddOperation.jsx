@@ -14,7 +14,7 @@ const OPERATIONS = [
   { type: "snyat_rs",    icon: "💴", label: "Снять с Р/С",      needsIp: true,  needsTargetIp: false, needsComment: false, needsDestination: false },
   { type: "snyat_debit", icon: "💵", label: "Снять с Дебета",   needsIp: true,  needsTargetIp: false, needsComment: false, needsDestination: false },
   { type: "vnesti_rs",   icon: "🏛",  label: "Внести на Р/С",    needsIp: true,  needsTargetIp: false, needsComment: false, needsDestination: false },
-  { type: "odolzhit",    icon: "🤝", label: "Одолжить",         needsIp: true,  needsTargetIp: true,  needsComment: false, needsDestination: false },
+  { type: "odolzhit",    icon: "🤝", label: "Одолжить",         needsIp: true,  needsTargetIp: true,  needsComment: false, needsDestination: true,  destinationLabel: "Откуда списать" },
 ]
 
 const DESTINATIONS = [
