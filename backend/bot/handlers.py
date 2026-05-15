@@ -58,6 +58,13 @@ def _onboarding_keyboard() -> InlineKeyboardMarkup:
     ])
 
 
+def _leave_confirm_keyboard() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="⚠️ Да, покинуть", callback_data="ws_leave_confirm")],
+        [InlineKeyboardButton(text="❌ Отмена", callback_data="ws_leave_cancel")],
+    ])
+
+
 # Варианты срока подписки: (месяцев, ярлык, скидка%)
 _DURATIONS = [
     (1,  "1 месяц",    0),
@@ -170,6 +177,7 @@ async def cmd_help(message: Message, db_user: User) -> None:
         f"/plan — текущий тарифный план\n"
         f"/subscribe — улучшить тариф\n"
         f"/invite — код приглашения (для владельцев)\n"
+        f"/leave — покинуть рабочее пространство\n"
         f"/help — эта справка",
         reply_markup=_webapp_keyboard(),
     )
@@ -496,6 +504,88 @@ async def cmd_invite(message: Message, db_user: User, session: AsyncSession) -> 
         f"Участники: {member_count} / {limits['members']}\n\n"
         f"Отправьте этот код коллеге. Он введёт его в боте через /start.",
     )
+
+
+# ── /leave — выйти из воркспейса ─────────────────────────────────────────────
+
+@router.message(Command("leave"))
+async def cmd_leave(message: Message, db_user: User, session: AsyncSession) -> None:
+    if not db_user.workspace_id:
+        await message.answer("У вас нет рабочего пространства.")
+        return
+
+    ws = await crud.get_workspace(session, db_user.workspace_id)
+    if ws is None:
+        await message.answer("Рабочее пространство не найдено.")
+        return
+
+    is_owner = ws.owner_id == db_user.id
+    member_count = await crud.get_workspace_member_count(session, ws.id)
+
+    if is_owner and member_count <= 1:
+        text = (
+            f"⚠️ <b>Удалить рабочее пространство?</b>\n\n"
+            f"🏢 <b>{ws.name}</b>\n\n"
+            f"Вы единственный участник. Пространство будет <b>полностью удалено</b> "
+            f"вместе со всеми данными.\n\n"
+            f"Это действие <b>необратимо</b>. После этого вы сможете создать новое или "
+            f"вступить по коду приглашения."
+        )
+    elif is_owner:
+        text = (
+            f"⚠️ <b>Покинуть рабочее пространство?</b>\n\n"
+            f"🏢 <b>{ws.name}</b>\n\n"
+            f"Вы владелец, но есть другие участники ({member_count} чел.).\n"
+            f"Вы выйдете, данные и участники останутся. "
+            f"Продлить подписку после этого не получится.\n\n"
+            f"После выхода вы сможете вступить в другое пространство."
+        )
+    else:
+        text = (
+            f"⚠️ <b>Покинуть рабочее пространство?</b>\n\n"
+            f"🏢 <b>{ws.name}</b>\n\n"
+            f"Вы потеряете доступ к этому пространству.\n"
+            f"После выхода сможете вступить в другое или создать своё."
+        )
+
+    await message.answer(text, reply_markup=_leave_confirm_keyboard())
+
+
+@router.callback_query(F.data == "ws_leave_confirm")
+async def ws_leave_confirm(call: CallbackQuery, db_user: User, session: AsyncSession) -> None:
+    if not db_user.workspace_id:
+        await call.answer("У вас нет рабочего пространства.", show_alert=True)
+        return
+
+    async with session.begin():
+        ws = await crud.get_workspace(session, db_user.workspace_id)
+        if ws is None:
+            await call.answer("Рабочее пространство не найдено.", show_alert=True)
+            return
+
+        is_owner = ws.owner_id == db_user.id
+        member_count = await crud.get_workspace_member_count(session, ws.id)
+        ws_id = ws.id
+        ws_name = ws.name
+
+        db_user.workspace_id = None
+        db_user.role = "junior"
+
+        if is_owner and member_count <= 1:
+            await crud.delete_workspace(session, ws_id)
+
+    await call.message.edit_text(
+        f"✅ Вы покинули <b>{ws_name}</b>.\n\n"
+        f"Создайте новое пространство или вступите по коду приглашения:",
+        reply_markup=_onboarding_keyboard(),
+    )
+    await call.answer()
+
+
+@router.callback_query(F.data == "ws_leave_cancel")
+async def ws_leave_cancel(call: CallbackQuery) -> None:
+    await call.message.edit_text("Отменено.", reply_markup=None)
+    await call.answer()
 
 
 # ── /stats — статистика для создателя бота ───────────────────────────────────

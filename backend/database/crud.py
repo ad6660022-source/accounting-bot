@@ -350,6 +350,28 @@ async def reset_all_data(session: AsyncSession, workspace_id: int | None = None)
     logger.info("Все данные сброшены (workspace=%s)", workspace_id)
 
 
+async def delete_workspace(session: AsyncSession, workspace_id: int) -> None:
+    """Удаляет воркспейс и все его данные. Workspace_id у пользователей нужно сбросить до вызова."""
+    from sqlalchemy import select as sa_select
+    ip_ids_result = await session.execute(sa_select(IP.id).where(IP.workspace_id == workspace_id))
+    ip_ids = [r[0] for r in ip_ids_result.all()]
+
+    await session.execute(delete(IpDebt).where(IpDebt.workspace_id == workspace_id))
+    if ip_ids:
+        await session.execute(delete(Transaction).where(
+            or_(Transaction.workspace_id == workspace_id, Transaction.ip_id.in_(ip_ids))
+        ))
+    else:
+        await session.execute(delete(Transaction).where(Transaction.workspace_id == workspace_id))
+    await session.execute(delete(Expense).where(Expense.workspace_id == workspace_id))
+    await session.execute(delete(IP).where(IP.workspace_id == workspace_id))
+
+    ws = await get_workspace(session, workspace_id)
+    if ws is not None:
+        await session.delete(ws)
+    logger.info("Воркспейс #%d удалён полностью", workspace_id)
+
+
 # ── Глобальная статистика (для создателя бота) ────────────────────────────────
 
 async def get_global_stats(session: AsyncSession) -> dict:
